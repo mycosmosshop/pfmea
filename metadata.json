@@ -1,0 +1,5 @@
+{
+  "name": "PFMEA Interactive Editor v3",
+  "description": "An interactive editor for Process Failure Mode and Effects Analysis (PFMEA) using a tree and table view.",
+  "requestFramePermissions": []
+}
