@@ -221,12 +221,12 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     const apLFill = { fgColor: { rgb: "C6EFCE" } };
 
     const getApFill = (ap?: any) => {
-        const apString = String(ap || '');
-        switch(apString.trim()) {
+        // Revize AP değerleri parantezli gelir ("(M)","(H)","(L)") — parantezleri sıyırıp eşleştir ki o sütun da renklensin.
+        const apString = String(ap || '').replace(/[()]/g, '').trim().toUpperCase();
+        switch(apString) {
             case 'H': return apHFill;
             case 'M': return apMFill;
-            case 'L': 
-            case '(L)': return apLFill;
+            case 'L': return apLFill;
             default: return undefined;
         }
     };
