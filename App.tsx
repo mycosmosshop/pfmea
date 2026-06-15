@@ -16,7 +16,7 @@ import { DetectionModal } from './components/DetectionModal';
 import { DetectionAssistantModal } from './components/DetectionAssistantModal';
 import AiagViewTable from './components/AiagViewTable';
 import ProjectDataView from './components/ProjectDataView';
-import { getAllProjects, saveProject, getProject, deleteProject } from './utils/projectDb';
+import { getAllProjects, saveProject, getProject, deleteProject } from './utils/cloudDb';
 import { ProjectConfigurationView } from './components/ProjectConfigurationView';
 import { TaskManagerModal } from './components/TaskManagerModal';
 
