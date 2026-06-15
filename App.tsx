@@ -348,17 +348,16 @@ const App: React.FC = () => {
   const isSyncing = useRef(false);
 
   const [dividerPosition, setDividerPosition] = useState(50); // percentage
+  const [isDraggingActive, setIsDraggingActive] = useState(false);
   const splitPaneRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
 
   const handleDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
-      isDragging.current = true;
+      setIsDraggingActive(true);
   };
 
-  const handleSplitPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDragging.current || !splitPaneRef.current) return;
-      e.preventDefault();
+  const handleOverlayPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+      if (!splitPaneRef.current) return;
       const rect = splitPaneRef.current.getBoundingClientRect();
       const pos = layout === 'horizontal'
           ? ((e.clientX - rect.left) / rect.width) * 100
@@ -366,8 +365,8 @@ const App: React.FC = () => {
       setDividerPosition(Math.max(10, Math.min(90, pos)));
   }, [layout]);
 
-  const handleSplitPointerUp = () => {
-      isDragging.current = false;
+  const handleOverlayPointerUp = () => {
+      setIsDraggingActive(false);
   };
   
   useEffect(() => {
@@ -1714,13 +1713,14 @@ const App: React.FC = () => {
     }
     if (layout === 'vertical') {
       return (
-          <div
-              ref={splitPaneRef}
-              className="flex flex-col flex-grow min-h-0 select-none"
-              onPointerMove={handleSplitPointerMove}
-              onPointerUp={handleSplitPointerUp}
-              onPointerLeave={handleSplitPointerUp}
-          >
+          <div ref={splitPaneRef} className="flex flex-col flex-grow min-h-0 relative">
+              {isDraggingActive && (
+                  <div
+                      className="fixed inset-0 z-50 cursor-row-resize"
+                      onPointerMove={handleOverlayPointerMove}
+                      onPointerUp={handleOverlayPointerUp}
+                  />
+              )}
               <div style={{ height: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
                   {renderViewComponent(leftView)}
               </div>
@@ -1733,22 +1733,23 @@ const App: React.FC = () => {
                   <div className="h-1 w-16 rounded-full bg-gray-500 group-hover:bg-white group-active:bg-white"></div>
               </div>
               <div className="flex-grow min-h-0 overflow-auto border border-gray-300 rounded-md flex flex-col">
-                   <div className="flex-grow overflow-auto">
-                        {renderViewComponent(rightView)}
-                   </div>
+                  <div className="flex-grow overflow-auto">
+                      {renderViewComponent(rightView)}
+                  </div>
               </div>
           </div>
       );
     }
     if (layout === 'horizontal') {
       return (
-          <div
-              ref={splitPaneRef}
-              className="flex flex-row flex-grow min-h-0 select-none"
-              onPointerMove={handleSplitPointerMove}
-              onPointerUp={handleSplitPointerUp}
-              onPointerLeave={handleSplitPointerUp}
-          >
+          <div ref={splitPaneRef} className="flex flex-row flex-grow min-h-0 relative">
+              {isDraggingActive && (
+                  <div
+                      className="fixed inset-0 z-50 cursor-col-resize"
+                      onPointerMove={handleOverlayPointerMove}
+                      onPointerUp={handleOverlayPointerUp}
+                  />
+              )}
                <div style={{ width: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
                   {renderViewComponent(leftView)}
                </div>
