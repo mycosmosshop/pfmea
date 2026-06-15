@@ -36,11 +36,15 @@ export interface AntetOptions {
 export function writeSanifoamAntet(ws: { [k: string]: any }, merges: any[], opts: AntetOptions): number {
   const last = opts.lastCol;
 
-  const logoStyle  = { font: { name: 'Times New Roman', sz: 22, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: thinBorder };
-  const topStyle   = { font: { sz: 10 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: thinBorder };
-  const titleStyle = { font: { sz: 14, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: thinBorder };
-  const keyStyle   = { font: { sz: 9 }, fill: { fgColor: { rgb: 'F2F2F2' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: thinBorder };
-  const valStyle   = { font: { sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: thinBorder };
+  // Antet için belirgin (medium) kenarlık — büyük birleşik hücrelerde çizgilerin net görünmesi için
+  const me = { style: 'medium' };
+  const box = { top: me, bottom: me, left: me, right: me };
+
+  const logoStyle  = { font: { name: 'Times New Roman', sz: 22, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: box };
+  const topStyle   = { font: { sz: 10 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: box };
+  const titleStyle = { font: { sz: 14, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: box };
+  const keyStyle   = { font: { sz: 9 }, fill: { fgColor: { rgb: 'F2F2F2' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: box };
+  const valStyle   = { font: { sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: box };
 
   // Genişliğe göre blok payları
   const logoC1 = last >= 16 ? 2 : 1;          // sol logo: 0..logoC1
@@ -97,6 +101,13 @@ export function writeProjectInfoLine(ws: { [k: string]: any }, merges: any[], ro
 
 // !merges, !cols, !ref ayarlar ve dosyayı indirir.
 export function finalizeAndDownload(ws: { [k: string]: any }, merges: any[], colWidths: number[], lastCol: number, lastRow: number, sheetName: string, fileName: string): void {
+  // Boş kalan tüm hücreleri ince kenarlıkla doldur — tabloda hiçbir yerde çizgi eksiği kalmasın.
+  for (let r = 0; r <= lastRow; r++) {
+    for (let c = 0; c <= lastCol; c++) {
+      const a = encCell(r, c);
+      if (!ws[a]) ws[a] = { v: '', t: 's', s: { border: thinBorder } };
+    }
+  }
   ws['!merges'] = merges;
   ws['!cols'] = colWidths.map(wch => ({ wch }));
   ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: lastCol, r: lastRow } });

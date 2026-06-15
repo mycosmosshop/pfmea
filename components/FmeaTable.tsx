@@ -206,7 +206,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
 
     // --- STYLES ---
     const thinBorder = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-    const titleStyle = { font: { sz: 16, bold: true }, alignment: { horizontal: 'center' } };
+    const titleStyle = { font: { sz: 16, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: thinBorder, fill: { fgColor: { rgb: "DDEBF7" } } };
     
     const projectHeaderKeyStyle = { font: { sz: 9, bold: true }, border: thinBorder, fill: { fgColor: { rgb: "E7E6E6" } }, alignment: { horizontal: 'right', vertical: 'center' } };
     const projectHeaderValueStyle = { font: { sz: 9 }, border: thinBorder, alignment: { vertical: 'center', wrapText: true } };
@@ -235,7 +235,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     // --- SANIFOAM ANTET (paylaşılan helper) — Rev 7, Yürürlük 02.01.2025 ---
     rowIndex = writeSanifoamAntet(ws, merges, {
         title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)',
-        docNo: 'FR 34', rev: '0', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
+        docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
     });
 
     // --- MAIN TITLE ---
@@ -392,12 +392,21 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     });
     
     // --- FINALIZE & WRITE ---
+    // Boş kalan tüm hücreleri ince kenarlıkla doldur — antet/başlık/proje bilgisi alanında çizgi eksiği kalmasın.
+    const _lastRow = rowIndex - 1;
+    for (let r = 0; r <= _lastRow; r++) {
+        for (let c = 0; c <= 29; c++) {
+            const a = encodeCell(r, c);
+            if (!ws[a]) ws[a] = { v: '', t: 's', s: { border: thinBorder } };
+        }
+    }
+
     ws['!merges'] = merges;
-    
+
     const colWidths = [ 20, 20, 15, 20, 25, 20, 25, 5, 25, 25, 20, 5, 20, 5, 5, 10, 10, 20, 20, 15, 15, 10, 25, 15, 5, 5, 5, 10, 5, 20 ];
     ws['!cols'] = colWidths.map(wch => ({ wch }));
 
-    ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 29, r: rowIndex -1 } });
+    ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 29, r: _lastRow } });
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'FMEA');

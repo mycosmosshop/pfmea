@@ -248,7 +248,7 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
 
         let rowIndex = writeSanifoamAntet(ws, merges, {
             title: 'PROCESS FLOW DIAGRAM\n(PROSES AKIS SEMASI)',
-            docNo: 'FR 33', rev: '0', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
+            docNo: 'FR 33', rev: '4', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
         });
         rowIndex = writeProjectInfoLine(ws, merges, rowIndex, LAST, [
             `Proje: ${fmea.project || '-'}`, `Urun: ${fmea.productName || '-'}`,
