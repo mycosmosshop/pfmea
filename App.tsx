@@ -1781,7 +1781,7 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen font-sans text-gray-800 flex flex-col">
-      <div className="print:hidden">
+      <div className="print:hidden flex flex-col flex-grow min-h-0">
         <header className="bg-white shadow-md">
           <div className="container mx-auto px-4 py-3 flex justify-between items-center">
             <h1 className="text-xl font-bold text-blue-700">PFMEA Interactive Editor</h1>
