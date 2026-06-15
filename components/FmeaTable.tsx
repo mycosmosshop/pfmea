@@ -151,6 +151,12 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
   }, [data]);
 
 
+  const clsLabel = (key?: string): string => {
+    if (!key) return '';
+    const sym = registryData.classificationSymbols?.find(s => s.key === key);
+    return sym?.label || key;
+  };
+
   const getExportData = (): (string | number | undefined)[][] => {
     return rows.map(row => {
         const { item, step, func, mode, cause, effects } = row;
@@ -177,7 +183,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.detectionControl,
             cause?.detection,
             cause?.actionPriority,
-            func?.classificationSymbolBefore || func?.classificationSymbolAfter,
+            clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter),
             cause?.filterCode,
             joinActionDetails(preventionActions, 'description'),
             joinActionDetails(detectionActions, 'description'),
@@ -189,7 +195,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.revisedSeverity,
             cause?.revisedOccurrence,
             cause?.revisedDetection,
-            func?.classificationSymbolBefore || func?.classificationSymbolAfter,
+            clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter),
             cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
             cause?.remarks,
         ];
@@ -341,7 +347,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.detectionControl },
             { v: cause?.detection },
             { v: cause?.actionPriority },
-            { v: func?.classificationSymbolBefore || func?.classificationSymbolAfter, first: isFirstFuncRow, span: funcRowSpans[func?.id] },
+            { v: clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter), first: isFirstFuncRow, span: funcRowSpans[func?.id] },
             { v: cause?.filterCode },
             { v: joinActionDetails(preventionActions, 'description') },
             { v: joinActionDetails(detectionActions, 'description') },
@@ -353,7 +359,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.revisedSeverity },
             { v: cause?.revisedOccurrence },
             { v: cause?.revisedDetection },
-            { v: func?.classificationSymbolBefore || func?.classificationSymbolAfter, first: isFirstFuncRow, span: funcRowSpans[func?.id] },
+            { v: clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter), first: isFirstFuncRow, span: funcRowSpans[func?.id] },
             { v: cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '' },
             { v: cause?.remarks }
         ];
