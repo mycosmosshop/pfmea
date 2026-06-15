@@ -111,7 +111,7 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
 
     let rowIndex = writeSanifoamAntet(ws, merges, {
       title: 'CONTROL PLAN\n(KONTROL PLANI)',
-      docNo: 'FR 35', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
+      docNo: 'FR 35', rev: '0', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
     });
     rowIndex = writeProjectInfoLine(ws, merges, rowIndex, LAST, [
       `Proje: ${fmea.project || '-'}`, `Urun: ${fmea.productName || '-'}`,

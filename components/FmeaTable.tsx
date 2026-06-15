@@ -235,7 +235,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     // --- SANIFOAM ANTET (paylaşılan helper) — Rev 7, Yürürlük 02.01.2025 ---
     rowIndex = writeSanifoamAntet(ws, merges, {
         title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)',
-        docNo: 'FR 34', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
+        docNo: 'FR 34', rev: '0', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
     });
 
     // --- MAIN TITLE ---

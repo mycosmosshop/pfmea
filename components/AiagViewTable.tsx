@@ -180,7 +180,7 @@ const AiagViewTable: React.FC<AiagViewTableProps> = ({ data, registryData, proje
 
         let rowIndex = writeSanifoamAntet(ws, merges, {
             title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(AIAG)',
-            docNo: 'FR 34', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
+            docNo: 'FR 34', rev: '0', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
         });
         rowIndex = writeProjectInfoLine(ws, merges, rowIndex, LAST, [
             `Proje: ${fmea.project || '-'}`, `Urun: ${fmea.productName || '-'}`,
