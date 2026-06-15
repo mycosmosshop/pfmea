@@ -4,6 +4,8 @@ import { ClassificationSymbol } from './ClassificationSymbol';
 import { SvgIconRenderer } from './icons/Icons';
 import { encCell, writeSanifoamAntet, writeProjectInfoLine, finalizeAndDownload, headerBandStyle, bodyStyle, bodyCenterStyle, zebraFill } from '../utils/excelExport';
 
+declare const jspdf: any;
+
 interface FlowDiagramViewProps {
   data: FmeaData;
   registryData: RegistryData;
@@ -308,6 +310,146 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
         finalizeAndDownload(ws, merges, cols, LAST, rowIndex - 1, 'Flow', `${fmea.project || 'fmea'}-Flow-${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
+    // --- Akış Şeması -> PDF (gerçek şekiller + bağlantı okları, antetli) ---
+    const TR_MAP: { [k: string]: string } = { 'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U','â':'a','î':'i','û':'u' };
+    const tr = (s: any): string => String(s == null ? '' : s).replace(/[çÇğĞıİöÖşŞüÜâîû]/g, ch => TR_MAP[ch] || ch);
+
+    const handleExportToPdf = () => {
+        const { jsPDF } = jspdf;
+        const fmea = projectData.fmea;
+        const symbols = registryData.flowchartSymbols || [];
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const PW = doc.internal.pageSize.getWidth();   // 297
+        const M = 8;
+        const W = PW - 2 * M;
+
+        // ---------- ANTET ----------
+        let y = M;
+        const antetH = 24;
+        const logoW = 38, gridW = 64, midW = W - logoW - gridW;
+        doc.setDrawColor(0); doc.setLineWidth(0.5);
+        doc.rect(M, y, logoW, antetH);
+        doc.setFont('times', 'bold'); doc.setFontSize(22);
+        doc.text('Sanifoam', M + logoW / 2, y + antetH / 2 + 2, { align: 'center' });
+        const midX = M + logoW;
+        doc.rect(midX, y, midW, antetH);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+        doc.text('QUALITY SYSTEM DOCUMENTATION', midX + midW / 2, y + 5, { align: 'center' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+        doc.text('PROCESS FLOW DIAGRAM', midX + midW / 2, y + 13, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text('(PROSES AKIS SEMASI)', midX + midW / 2, y + 19.5, { align: 'center' });
+        const gx = midX + midW, rowH = antetH / 4, keyW = gridW * 0.5;
+        const arows: [string, string][] = [['DOK.NO', 'FR 33'], ['Y. TRH.', '02.01.2025'], ['REV.NO', '4'], ['SAYFA', '1/1']];
+        doc.setFontSize(9);
+        arows.forEach((kv, i) => {
+            const ry = y + i * rowH;
+            doc.rect(gx, ry, keyW, rowH); doc.rect(gx + keyW, ry, gridW - keyW, rowH);
+            doc.setFont('helvetica', 'normal'); doc.text(kv[0], gx + keyW / 2, ry + rowH / 2 + 1.4, { align: 'center' });
+            doc.setFont('helvetica', 'bold'); doc.text(kv[1], gx + keyW + (gridW - keyW) / 2, ry + rowH / 2 + 1.4, { align: 'center' });
+        });
+        y += antetH;
+
+        // ---------- BİLGİ SATIRI ----------
+        doc.setFillColor(231, 230, 230); doc.rect(M, y, W, 6.5, 'FD');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0);
+        doc.text(tr(`Proje: ${fmea.project || '-'}     |     Urun: ${fmea.productName || '-'}     |     Musteri: ${fmea.client || '-'}     |     Rev. Tarihi: ${fmea.lastRevisionDate || '-'}`), M + 2, y + 4.3);
+        y += 6.5 + 2;
+
+        // ---------- KOLON DÜZENİ ----------
+        const SYMNAME: { [k: string]: string } = { process: 'Process', decision: 'Decision', data: 'Data', document: 'Document', terminator: 'Terminator', delay: 'Delay' };
+        const wProc = 16, wSym = 17, wOzel = 24, wIyi = 28;
+        const wAcik = W - (wProc + wSym * symbols.length + wOzel + wIyi);
+        const xProc = M;
+        const xSym0 = xProc + wProc;
+        const xOzel = xSym0 + wSym * symbols.length;
+        const xIyi = xOzel + wOzel;
+        const xAcik = xIyi + wIyi;
+        const symCenter = (i: number) => xSym0 + wSym * i + wSym / 2;
+
+        // ---------- BAŞLIK ----------
+        const hH = 11;
+        doc.setFillColor(31, 59, 93); doc.setDrawColor(255); doc.setLineWidth(0.2);
+        const headCells: [number, number, string][] = [[xProc, wProc, 'Proses No'], [xOzel, wOzel, 'Ozel Karakteristik'], [xIyi, wIyi, 'Iyilestirme Sonrasi'], [xAcik, wAcik, 'Proses Aciklama']];
+        doc.rect(xSym0, y, wSym * symbols.length, hH, 'FD');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(255);
+        doc.text('Akis Cizelgesi', xSym0 + wSym * symbols.length / 2, y + 4, { align: 'center' });
+        doc.setFontSize(5.6);
+        symbols.forEach((s, i) => { doc.rect(symCenter(i) - wSym / 2, y, wSym, hH, 'FD'); doc.text(SYMNAME[s.key] || tr(s.label).slice(0, 10), symCenter(i), y + 9, { align: 'center' }); });
+        doc.setFontSize(6.8);
+        headCells.forEach(([x, w, t]) => { doc.rect(x, y, w, hH, 'FD'); doc.text(t, x + w / 2, y + hH / 2 + 1, { align: 'center', maxWidth: w - 2 }); });
+        y += hH;
+
+        // ---------- VERİ SATIRLARI + ŞEKİLLER ----------
+        const flowRows: { step: ProcessStep; func: ProcessStepFunction }[] = [];
+        (Object.values(data.processItems) as ProcessItem[]).forEach(item => {
+            item.stepIds.forEach(sid => {
+                const step = data.processSteps[sid];
+                if (!step) return;
+                step.functionIds.map(fid => data.processStepFunctions[fid]).filter(Boolean)
+                    .filter((f: ProcessStepFunction) => !!f.flowchartSymbol)
+                    .forEach((func: ProcessStepFunction) => flowRows.push({ step, func }));
+            });
+        });
+
+        const rH = 25, shW = 17, shH = 11;
+        const shapeCenters: { cx: number; cy: number; sym: number }[] = [];
+
+        const drawShape = (key: string, cx: number, cy: number, label: string) => {
+            doc.setDrawColor(31, 59, 93); doc.setLineWidth(0.4); doc.setFillColor(68, 114, 196);
+            const w = shW, h = shH;
+            if (key === 'decision') doc.lines([[w / 2, h / 2], [-w / 2, h / 2], [-w / 2, -h / 2], [w / 2, -h / 2]], cx, cy - h / 2, [1, 1], 'FD', true);
+            else if (key === 'terminator') doc.roundedRect(cx - w / 2, cy - h / 2, w, h, h / 2, h / 2, 'FD');
+            else if (key === 'data') doc.lines([[w, 0], [-w * 0.18, h], [-w, 0], [w * 0.18, -h]], cx - w / 2 + w * 0.09, cy - h / 2, [1, 1], 'FD', true);
+            else doc.rect(cx - w / 2, cy - h / 2, w, h, 'FD'); // process/document/delay -> kutu
+            doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+            doc.text(label, cx, cy + 1.6, { align: 'center' });
+            doc.setTextColor(0);
+        };
+
+        doc.setLineWidth(0.2); doc.setDrawColor(150);
+        flowRows.forEach((fr, idx) => {
+            const ry = y + idx * rH;
+            // satır hücre kenarlıkları
+            doc.setDrawColor(150); doc.setLineWidth(0.2);
+            doc.rect(xProc, ry, wProc, rH);
+            symbols.forEach((s, i) => doc.rect(symCenter(i) - wSym / 2, ry, wSym, rH));
+            doc.rect(xOzel, ry, wOzel, rH); doc.rect(xIyi, ry, wIyi, rH); doc.rect(xAcik, ry, wAcik, rH);
+
+            const symIdx = Math.max(0, symbols.findIndex(s => s.key === fr.func.flowchartSymbol));
+            const cx = symCenter(symIdx), cy = ry + rH / 2;
+            drawShape(fr.func.flowchartSymbol || 'process', cx, cy, String(fr.step.operationNumber ?? ''));
+            shapeCenters.push({ cx, cy, sym: symIdx });
+
+            // Proses No
+            doc.setTextColor(0); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+            doc.text(String(fr.step.operationNumber ?? ''), xProc + wProc / 2, cy + 1.5, { align: 'center' });
+            // Ozel / Iyilestirme (<!>)
+            doc.setFontSize(10); doc.setTextColor(200, 0, 0);
+            if (fr.func.classificationSymbolBefore) doc.text(tr(clsText(fr.func.classificationSymbolBefore)), xOzel + wOzel / 2, cy + 1.6, { align: 'center' });
+            if (fr.func.classificationSymbolAfter) doc.text(tr(clsText(fr.func.classificationSymbolAfter)), xIyi + wIyi / 2, cy + 1.6, { align: 'center' });
+            // Aciklama
+            doc.setTextColor(0); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+            doc.text(tr(fr.func.processDescription || fr.func.name || ''), xAcik + 3, cy + 1.5, { maxWidth: wAcik - 6 });
+        });
+
+        // ---------- BAĞLANTI OKLARI ----------
+        const arrow = (x1: number, y1: number, x2: number, y2: number) => {
+            doc.setDrawColor(0, 112, 192); doc.setLineWidth(0.6); doc.line(x1, y1, x2, y2);
+            const ang = Math.atan2(y2 - y1, x2 - x1), a = 2.4;
+            doc.line(x2, y2, x2 - a * Math.cos(ang - 0.45), y2 - a * Math.sin(ang - 0.45));
+            doc.line(x2, y2, x2 - a * Math.cos(ang + 0.45), y2 - a * Math.sin(ang + 0.45));
+        };
+        for (let i = 0; i < shapeCenters.length - 1; i++) {
+            const A = shapeCenters[i], B = shapeCenters[i + 1];
+            const ay = A.cy + shH / 2, by = B.cy - shH / 2;
+            if (A.cx === B.cx) arrow(A.cx, ay, B.cx, by);
+            else { const midY = (ay + by) / 2; doc.setDrawColor(0, 112, 192); doc.setLineWidth(0.6); doc.line(A.cx, ay, A.cx, midY); doc.line(A.cx, midY, B.cx, midY); arrow(B.cx, midY, B.cx, by); }
+        }
+
+        doc.save(`${fmea.project || 'fmea'}-Flow-${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
+
     return (
     <div ref={tableContainerRef} className="bg-white p-6 rounded-lg shadow-lg overflow-x-auto relative">
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-20">
@@ -321,7 +463,10 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
 
         <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-700">Flow Diagram View</h2>
-            <button onClick={handleExportToExcel} className="px-4 py-1.5 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 shadow-sm relative z-30">Export to Excel</button>
+            <div className="flex gap-2 relative z-30">
+                <button onClick={handleExportToExcel} className="px-4 py-1.5 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 shadow-sm">Export to Excel</button>
+                <button onClick={handleExportToPdf} className="px-4 py-1.5 text-sm font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 shadow-sm">Export to PDF (şekilli)</button>
+            </div>
         </div>
         <div className="overflow-x-auto">
         <table className="min-w-full border-collapse border border-gray-400 bg-white relative z-10">
