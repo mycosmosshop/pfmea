@@ -351,39 +351,32 @@ const App: React.FC = () => {
   const splitPaneRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef(false);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-      if (!isResizing.current || !splitPaneRef.current) return;
-      
-      const rect = splitPaneRef.current.getBoundingClientRect();
-      let newPosition = 0;
-      
-      if (layout === 'horizontal') {
-          newPosition = ((e.clientX - rect.left) / rect.width) * 100;
-      } else { // vertical
-          newPosition = ((e.clientY - rect.top) / rect.height) * 100;
-      }
-      
-      setDividerPosition(Math.max(10, Math.min(90, newPosition)));
-  }, [layout]);
-
-  const handleMouseUp = useCallback(() => {
-      isResizing.current = false;
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
-
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-  }, [handleMouseMove]);
-  
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
       e.preventDefault();
       isResizing.current = true;
       document.body.style.cursor = layout === 'horizontal' ? 'col-resize' : 'row-resize';
       document.body.style.userSelect = 'none';
 
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-  };
+      const onMove = (ev: MouseEvent) => {
+          if (!splitPaneRef.current) return;
+          const rect = splitPaneRef.current.getBoundingClientRect();
+          const newPosition = layout === 'horizontal'
+              ? ((ev.clientX - rect.left) / rect.width) * 100
+              : ((ev.clientY - rect.top) / rect.height) * 100;
+          setDividerPosition(Math.max(10, Math.min(90, newPosition)));
+      };
+
+      const onUp = () => {
+          isResizing.current = false;
+          document.body.style.cursor = 'default';
+          document.body.style.userSelect = 'auto';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+  }, [layout]);
   
   useEffect(() => {
     const initializeApp = async () => {
@@ -1733,13 +1726,14 @@ const App: React.FC = () => {
               <div style={{ height: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
                   {renderViewComponent(leftView)}
               </div>
-              <div 
-                  onMouseDown={handleMouseDown} 
-                  className="h-2 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 transition-colors flex items-center justify-center my-1 rounded-full group"
+              <div
+                  onMouseDown={handleMouseDown}
+                  className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group select-none"
                   aria-label="Resize vertical panes"
                   role="separator"
+                  style={{ touchAction: 'none' }}
               >
-                  <div className="h-px w-10 bg-gray-500 group-hover:bg-white"></div>
+                  <div className="h-1 w-16 rounded-full bg-gray-500 group-hover:bg-white group-active:bg-white"></div>
               </div>
               <div className="flex-grow min-h-0 overflow-auto border border-gray-300 rounded-md flex flex-col">
                    <div className="flex-grow overflow-auto">
@@ -1755,13 +1749,14 @@ const App: React.FC = () => {
                <div style={{ width: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
                   {renderViewComponent(leftView)}
                </div>
-               <div 
-                  onMouseDown={handleMouseDown} 
-                  className="w-2 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 transition-colors flex items-center justify-center mx-1 rounded-full group"
+               <div
+                  onMouseDown={handleMouseDown}
+                  className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group select-none"
                   aria-label="Resize horizontal panes"
                   role="separator"
+                  style={{ touchAction: 'none' }}
               >
-                  <div className="w-px h-10 bg-gray-500 group-hover:bg-white"></div>
+                  <div className="w-1 h-16 rounded-full bg-gray-500 group-hover:bg-white group-active:bg-white"></div>
               </div>
               <div className="flex-grow min-w-0 overflow-auto border border-gray-300 rounded-md" ref={rightPaneRef} onScroll={() => handleScroll('right')}>
                   {renderViewComponent(rightView)}
