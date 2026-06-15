@@ -397,6 +397,12 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     XLSX.writeFile(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  // jsPDF standart fontu Türkçe karakter desteklemez (ı,ş,ğ,ü,ö,ç bozulur ve metin harf-harf yayılır).
+  // Çözüm: PDF'e giden metni ASCII'ye çevir (Altıntaş -> Altintas). Excel'de bu sorun yok (Türkçe korunur).
+  const TR_MAP: { [k: string]: string } = { 'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U','â':'a','î':'i','û':'u' };
+  const tr = (s: any): string => String(s == null ? '' : s).replace(/[çÇğĞıİöÖşŞüÜâîû]/g, ch => TR_MAP[ch] || ch);
+  const trCell = (data: any) => { if (data?.cell?.text) data.cell.text = (data.cell.text || []).map((ln: any) => tr(ln)); };
+
   const handleExportToPdf = () => {
     const { jsPDF } = jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
@@ -449,7 +455,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     ];
 
     (doc as any).autoTable({
-        body: headerDataBody,
+        body: headerDataBody.map((r: any[]) => r.map(tr)),
         startY: lastY,
         theme: 'plain',
         styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
@@ -469,7 +475,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     if (fmea.teamMembers) {
       (doc as any).autoTable({
         body: [
-            [{ content: 'Team members:', styles: { fontStyle: 'bold' }}, { content: fmea.teamMembers }],
+            [{ content: 'Team members:', styles: { fontStyle: 'bold' }}, { content: tr(fmea.teamMembers) }],
         ],
         startY: lastY,
         theme: 'plain',
@@ -483,7 +489,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
      if (fmea.notes) {
        (doc as any).autoTable({
         body: [
-            [{ content: 'Notes/comments:', styles: { fontStyle: 'bold' }}, { content: fmea.notes }],
+            [{ content: 'Notes/comments:', styles: { fontStyle: 'bold' }}, { content: tr(fmea.notes) }],
         ],
         startY: lastY,
         theme: 'plain',
@@ -530,6 +536,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
         valign: 'middle',
       },
       didParseCell: function (data: any) {
+        trCell(data); // Türkçe -> ASCII (font sorunu)
         if (data.row.section === 'head') {
             data.cell.styles.halign = 'center';
             if (data.row.index === 0) {

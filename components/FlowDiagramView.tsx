@@ -174,7 +174,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, o
             const step = data.processSteps[stepId];
             if (!step) return null;
 
-            const stepFunctions = step.functionIds.map(fid => data.processStepFunctions[fid]).filter(Boolean);
+            // Akış şemasında YALNIZCA ana prosesler (flowchart sembolü atanmış fonksiyonlar) gösterilir; ara karakteristik satırları gizlenir.
+            const stepFunctions = step.functionIds.map(fid => data.processStepFunctions[fid]).filter(Boolean).filter((f: ProcessStepFunction) => !!f.flowchartSymbol);
 
             if (stepFunctions.length === 0) {
                 return (
