@@ -528,6 +528,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
         fontSize: 5,
         cellPadding: 2,
         overflow: 'linebreak',
+        lineColor: [110, 110, 110], // belirgin grid/tablo çizgileri
+        lineWidth: 0.35,
+        textColor: [20, 20, 20],
       },
       headStyles: {
         fillColor: [23, 54, 93], // Dark blue
@@ -550,6 +553,12 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             if (data.row.index === 1) {
                 data.cell.styles.fontSize = 4;
             }
+        }
+        if (data.row.section === 'body') {
+            const ap = (data.cell.text || []).join('').replace(/[()]/g, '').trim().toUpperCase();
+            if (ap === 'H') { data.cell.styles.fillColor = [255, 199, 206]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.halign = 'center'; }
+            else if (ap === 'M') { data.cell.styles.fillColor = [255, 235, 156]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.halign = 'center'; }
+            else if (ap === 'L') { data.cell.styles.fillColor = [198, 239, 206]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.halign = 'center'; }
         }
       },
     });
