@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
+import { writeSanifoamAntet } from '../utils/excelExport';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
@@ -231,58 +232,11 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
         }
     };
     
-    // --- SANIFOAM ANTET (kurumsal form başlığı) ---
-    // Sol: "Sanifoam" logo | Orta: doküman adı + form başlığı | Sağ: DOK.NO/Y.TRH/REV.NO/SAYFA grid'i
-    const antetEdge = { style: 'thin' };
-    const antetBorder = { top: antetEdge, bottom: antetEdge, left: antetEdge, right: antetEdge };
-    const logoStyle = { font: { name: 'Times New Roman', sz: 22, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: antetBorder };
-    const antetTopStyle = { font: { sz: 10 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: antetBorder };
-    const antetTitleStyle = { font: { sz: 14, bold: true }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: antetBorder };
-    const antetKeyStyle = { font: { sz: 9 }, alignment: { horizontal: 'center', vertical: 'center' }, border: antetBorder };
-    const antetValStyle = { font: { sz: 11, bold: true }, alignment: { horizontal: 'center', vertical: 'center' }, border: antetBorder };
-
-    const A_LOGO_C0 = 0, A_LOGO_C1 = 2;     // logo: kolon 0-2
-    const A_MID_C0 = 3,  A_MID_C1 = 23;     // orta blok: kolon 3-23
-    const A_KEY_C0 = 24, A_KEY_C1 = 26;     // sağ etiket: kolon 24-26
-    const A_VAL_C0 = 27, A_VAL_C1 = 29;     // sağ değer: kolon 27-29
-
-    // Birleştirilen alanlarda kenarlıkların çizilmesi için boş hücreleri stille doldur
-    const fillAntet = (r0: number, r1: number, c0: number, c1: number, style: any) => {
-        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-            if (!ws[encodeCell(r, c)]) ws[encodeCell(r, c)] = { v: '', t: 's', s: style };
-        }
-    };
-
-    // Logo (satır 0-3, kolon 0-2)
-    ws[encodeCell(0, A_LOGO_C0)] = { v: 'Sanifoam', t: 's', s: logoStyle };
-    merges.push({ s: { r: 0, c: A_LOGO_C0 }, e: { r: 3, c: A_LOGO_C1 } });
-    fillAntet(0, 3, A_LOGO_C0, A_LOGO_C1, logoStyle);
-
-    // Orta üst (satır 0): doküman adı
-    ws[encodeCell(0, A_MID_C0)] = { v: 'QUALITY SYSTEM DOCUMENTATION', t: 's', s: antetTopStyle };
-    merges.push({ s: { r: 0, c: A_MID_C0 }, e: { r: 0, c: A_MID_C1 } });
-    fillAntet(0, 0, A_MID_C0, A_MID_C1, antetTopStyle);
-
-    // Orta başlık (satır 1-3): form adı
-    ws[encodeCell(1, A_MID_C0)] = { v: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)', t: 's', s: antetTitleStyle };
-    merges.push({ s: { r: 1, c: A_MID_C0 }, e: { r: 3, c: A_MID_C1 } });
-    fillAntet(1, 3, A_MID_C0, A_MID_C1, antetTitleStyle);
-
-    // Sağ etiket/değer grid'i (satır 0-3) — Rev 7, Yürürlük 02.01.2025
-    const antetGrid: [string, string][] = [ ['DOK.NO', 'FR 34'], ['Y. TRH.', '02.01.2025'], ['REV.NO', '7'], ['SAYFA', '1/1'] ];
-    antetGrid.forEach((kv, i) => {
-        ws[encodeCell(i, A_KEY_C0)] = { v: kv[0], t: 's', s: antetKeyStyle };
-        merges.push({ s: { r: i, c: A_KEY_C0 }, e: { r: i, c: A_KEY_C1 } });
-        fillAntet(i, i, A_KEY_C0, A_KEY_C1, antetKeyStyle);
-        ws[encodeCell(i, A_VAL_C0)] = { v: kv[1], t: 's', s: antetValStyle };
-        merges.push({ s: { r: i, c: A_VAL_C0 }, e: { r: i, c: A_VAL_C1 } });
-        fillAntet(i, i, A_VAL_C0, A_VAL_C1, antetValStyle);
+    // --- SANIFOAM ANTET (paylaşılan helper) — Rev 7, Yürürlük 02.01.2025 ---
+    rowIndex = writeSanifoamAntet(ws, merges, {
+        title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)',
+        docNo: 'FR 34', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
     });
-
-    // Antet bandı satır yükseklikleri (satır 0-3)
-    ws['!rows'] = [ { hpt: 18 }, { hpt: 20 }, { hpt: 20 }, { hpt: 20 } ];
-
-    rowIndex = 5; // antet (0-3) + 1 boş satır boşluğu
 
     // --- MAIN TITLE ---
     ws[encodeCell(rowIndex, 0)] = { v: 'Process Failure Mode and Effects Analysis (Process FMEA)', t: 's', s: titleStyle };

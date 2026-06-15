@@ -1716,9 +1716,9 @@ const App: React.FC = () => {
         case 'config': return <ProjectConfigurationView data={data} projects={projects.filter(p => p.id !== currentProjectId)} onDataUpdate={setData} onCopyToProject={handleCopyToProject} />;
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;
         case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} />;
-        case 'aiag': return <AiagViewTable data={data} onOpenModal={handleOpenModal} registryData={registryData} />;
-        case 'cp': return <ControlPlanTable data={data} onOpenModal={handleOpenModal} registryData={registryData} />;
-        case 'flow': return <FlowDiagramView data={data} onDataChange={setData} onOpenModal={handleOpenModal} registryData={registryData} onAddNewFunctionWithSymbol={handleAddNewFunctionWithSymbol} />;
+        case 'aiag': return <AiagViewTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
+        case 'cp': return <ControlPlanTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
+        case 'flow': return <FlowDiagramView data={data} onDataChange={setData} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} onAddNewFunctionWithSymbol={handleAddNewFunctionWithSymbol} />;
         default: return null;
     }
   };

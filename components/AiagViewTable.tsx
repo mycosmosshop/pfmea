@@ -3,12 +3,14 @@
 
 
 import React, { useMemo } from 'react';
-import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, FmeaAction } from '../types';
+import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, FmeaAction, ProjectData } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
+import { encCell, writeSanifoamAntet, writeProjectInfoLine, finalizeAndDownload, headerBandStyle, bodyStyle, bodyCenterStyle, zebraFill, rpnFillFor } from '../utils/excelExport';
 
 interface AiagViewTableProps {
   data: FmeaData;
   registryData: RegistryData;
+  projectData: ProjectData;
   onOpenModal: (modalInfo: ModalType) => void;
 }
 
@@ -67,7 +69,7 @@ const joinActionDetails = (actions: FmeaAction[] = [], field: keyof FmeaAction) 
 };
 
 
-const AiagViewTable: React.FC<AiagViewTableProps> = ({ data, registryData, onOpenModal }) => {
+const AiagViewTable: React.FC<AiagViewTableProps> = ({ data, registryData, projectData, onOpenModal }) => {
     const { rows, phaseRowSpans, funcRowSpans, modeRowSpans } = useMemo(() => {
         const generatedRows: AiagTableRow[] = [];
         const phaseSpans: Record<string, number> = {};
@@ -163,9 +165,111 @@ const AiagViewTable: React.FC<AiagViewTableProps> = ({ data, registryData, onOpe
         medium: registryData.rpnThresholdMedium
     };
 
+    const clsText = (key?: string) => {
+        if (!key) return '';
+        const c = registryData.classificationSymbols?.find(s => s.key === key);
+        return c?.label || key;
+    };
+
+    // --- AIAG görünümü -> antetli, biçimlendirilmiş Excel ---
+    const handleExportToExcel = () => {
+        const fmea = projectData.fmea;
+        const LAST = 19;
+        const ws: { [k: string]: any } = {};
+        const merges: any[] = [];
+
+        let rowIndex = writeSanifoamAntet(ws, merges, {
+            title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(AIAG)',
+            docNo: 'FR 34', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
+        });
+        rowIndex = writeProjectInfoLine(ws, merges, rowIndex, LAST, [
+            `Proje: ${fmea.project || '-'}`, `Urun: ${fmea.productName || '-'}`,
+            `Musteri: ${fmea.client || '-'}`, `FMEA No/Ver: ${fmea.fmeaNumberVersion || '-'}`,
+            `Rev. Tarihi: ${fmea.lastRevisionDate || '-'}`,
+        ]);
+
+        // Başlık bandı (2 satır)
+        const h1 = rowIndex, h2 = rowIndex + 1;
+        const setH = (r: number, c: number, v: string) => { ws[encCell(r, c)] = { v, t: 's', s: headerBandStyle }; };
+        const band1: [string, number, number][] = [
+            ['Phase', 0, 0], ['Requirement / Function / Characteristic', 1, 1], ['Failure Mode', 2, 2], ['Effect', 3, 3],
+            ['Severity (S)', 4, 4], ['Characteristics', 5, 5], ['Current State', 6, 11],
+            ['Recommended Actions', 12, 12], ['Responsibility / Planned Completion', 13, 13], ['Action Results', 14, 19],
+        ];
+        band1.forEach(([v, c0, c1]) => {
+            setH(h1, c0, v);
+            if (c1 > c0) { merges.push({ s: { r: h1, c: c0 }, e: { r: h1, c: c1 } }); for (let c = c0 + 1; c <= c1; c++) setH(h1, c, ''); }
+            else merges.push({ s: { r: h1, c: c0 }, e: { r: h2, c: c0 } });
+        });
+        const band2: [string, number][] = [
+            ['Failure Cause', 6], ['Preventive Actions', 7], ['Occurrence (O)', 8], ['Detection Actions', 9], ['Detection (D)', 10], ['RPN', 11],
+            ['Actions Taken / Compl. Date', 14], ['Severity (S)', 15], ['Occurrence (O)', 16], ['Detection (D)', 17], ['RPN', 18], ['Remarks', 19],
+        ];
+        band2.forEach(([v, c]) => setH(h2, c, v));
+        rowIndex += 2;
+
+        const numericCols = new Set([4, 8, 10, 11, 15, 16, 17, 18]);
+        const rpnCols = new Set([11, 18]);
+        let isZebra = false;
+        let lastPhase: string | null = null;
+
+        rows.forEach(row => {
+            const { phase, func, mode, effect, cause, isFirstPhaseRow, isFirstFuncRow, isFirstModeRow } = row;
+            if (isFirstPhaseRow && phase.id !== lastPhase) { isZebra = !isZebra; lastPhase = phase.id; }
+
+            const currentS = getSeverity(effect, cause);
+            const currentO = cause?.occurrence;
+            const currentD = cause?.detection;
+            const currentRpn = (currentS && currentO && currentD) ? currentS * currentO * currentD : undefined;
+            const revisedS = cause?.revisedSeverity, revisedO = cause?.revisedOccurrence, revisedD = cause?.revisedDetection;
+            const revisedRpn = (revisedS && revisedO && revisedD) ? revisedS * revisedO * revisedD : undefined;
+
+            const cells = [
+                { v: phase.name, first: isFirstPhaseRow, span: phaseRowSpans[phase.id] },
+                { v: func?.name, first: isFirstFuncRow, span: funcRowSpans[func?.id] },
+                { v: mode?.description, first: isFirstModeRow, span: modeRowSpans[mode?.id] },
+                { v: effect?.effectText ? `[${effect.clientType}] ${effect.effectText}\n(${effect.severity})` : '', first: isFirstModeRow, span: modeRowSpans[mode?.id] },
+                { v: currentS, first: isFirstModeRow, span: modeRowSpans[mode?.id] },
+                { v: clsText(func?.classificationSymbolBefore || func?.classificationSymbolAfter), first: isFirstModeRow, span: modeRowSpans[mode?.id] },
+                { v: cause?.description },
+                { v: cause?.preventionControl },
+                { v: currentO },
+                { v: cause?.detectionControl },
+                { v: currentD },
+                { v: currentRpn },
+                { v: (cause?.actions || []).map(a => `(${a.type === 'prevention' ? 'P' : 'D'}) ${a.description || ''}`).join('\n') },
+                { v: (cause?.actions || []).map(a => `${a.responsiblePerson || ''}\n${(a.targetCompletionDate || '').slice(0, 10)}`).join('\n---\n') },
+                { v: (cause?.actions || []).map(a => `${a.actionTaken || ''}\n${(a.completionDate || '').slice(0, 10)}`).join('\n---\n') },
+                { v: revisedS }, { v: revisedO }, { v: revisedD },
+                { v: revisedRpn ? `(${revisedRpn})` : '' },
+                { v: cause?.remarks },
+            ];
+
+            cells.forEach((cell, c) => {
+                const base = numericCols.has(c) ? bodyCenterStyle : bodyStyle;
+                let style: any = isZebra ? { ...base, ...zebraFill } : { ...base };
+                if (rpnCols.has(c)) {
+                    const f = rpnFillFor(c === 11 ? currentRpn : revisedRpn, rpnThresholds.high, rpnThresholds.medium);
+                    if (f) style = { ...style, fill: f };
+                }
+                if (cell.first === false) { ws[encCell(rowIndex, c)] = { v: '', t: 's', s: style }; return; }
+                const value = cell.v === undefined || cell.v === null ? '' : cell.v;
+                ws[encCell(rowIndex, c)] = { v: value, t: typeof value === 'number' ? 'n' : 's', s: style };
+                if ((cell.span || 1) > 1) merges.push({ s: { r: rowIndex, c }, e: { r: rowIndex + cell.span! - 1, c } });
+            });
+            rowIndex++;
+        });
+
+        const cols = [12, 24, 22, 28, 7, 12, 22, 18, 7, 18, 7, 7, 26, 20, 26, 7, 7, 7, 7, 20];
+        finalizeAndDownload(ws, merges, cols, LAST, rowIndex - 1, 'AIAG', `${fmea.project || 'fmea'}-AIAG-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-lg overflow-x-auto">
-            <h2 className="text-xl font-bold mb-4 text-gray-700">AIAG View</h2>
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-700">AIAG View</h2>
+                <button onClick={handleExportToExcel} className="px-4 py-1.5 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 shadow-sm">Export to Excel</button>
+            </div>
             <table className="min-w-full border-collapse border border-gray-400">
                 <thead className="bg-blue-800 text-white text-center">
                     <tr>

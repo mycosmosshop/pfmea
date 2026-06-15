@@ -1,17 +1,19 @@
 import React, { useMemo, useRef, useLayoutEffect, useState, useEffect, useCallback } from 'react';
-import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, RegistryData } from '../types';
+import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, RegistryData, ProjectData } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { SvgIconRenderer } from './icons/Icons';
+import { encCell, writeSanifoamAntet, writeProjectInfoLine, finalizeAndDownload, headerBandStyle, bodyStyle, bodyCenterStyle, zebraFill } from '../utils/excelExport';
 
 interface FlowDiagramViewProps {
   data: FmeaData;
   registryData: RegistryData;
+  projectData: ProjectData;
   onDataChange: (newData: FmeaData) => void;
   onOpenModal: (modalInfo: ModalType) => void;
   onAddNewFunctionWithSymbol: (stepId: string, symbolKey: string) => void;
 }
 
-const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, onDataChange, onOpenModal, onAddNewFunctionWithSymbol }) => {
+const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, projectData, onDataChange, onOpenModal, onAddNewFunctionWithSymbol }) => {
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const symbolCellRefs = useRef<Record<string, HTMLElement | null>>({});
     const [lines, setLines] = useState<string[]>([]);
@@ -228,6 +230,84 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, o
         })
     ).filter(Boolean);
 
+    const clsText = (key?: string) => {
+        if (!key) return '';
+        const c = registryData.classificationSymbols?.find(s => s.key === key);
+        return c?.label || key;
+    };
+
+    // --- Akış Şeması -> antetli, biçimlendirilmiş Excel (yalnızca ana prosesler) ---
+    const handleExportToExcel = () => {
+        const fmea = projectData.fmea;
+        const symbols = registryData.flowchartSymbols || [];
+        const nSym = symbols.length;
+        const COL_OZEL = nSym + 1, COL_IYI = nSym + 2, COL_ACIK = nSym + 3;
+        const LAST = nSym + 3;
+        const ws: { [k: string]: any } = {};
+        const merges: any[] = [];
+
+        let rowIndex = writeSanifoamAntet(ws, merges, {
+            title: 'PROCESS FLOW DIAGRAM\n(PROSES AKIS SEMASI)',
+            docNo: 'FR 33', rev: '7', date: '02.01.2025', sayfa: '1/1', lastCol: LAST,
+        });
+        rowIndex = writeProjectInfoLine(ws, merges, rowIndex, LAST, [
+            `Proje: ${fmea.project || '-'}`, `Urun: ${fmea.productName || '-'}`,
+            `Musteri: ${fmea.client || '-'}`, `Rev. Tarihi: ${fmea.lastRevisionDate || '-'}`,
+        ]);
+
+        // Başlık bandı (2 satır)
+        const h1 = rowIndex, h2 = rowIndex + 1;
+        const putH = (r0: number, r1: number, c0: number, c1: number, v: string) => {
+            ws[encCell(r0, c0)] = { v, t: 's', s: headerBandStyle };
+            if (r1 > r0 || c1 > c0) merges.push({ s: { r: r0, c: c0 }, e: { r: r1, c: c1 } });
+            for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (!(r === r0 && c === c0)) ws[encCell(r, c)] = { v: '', t: 's', s: headerBandStyle };
+        };
+        putH(h1, h1, 0, nSym, 'Akış Çizelgesi');
+        putH(h1, h2, COL_OZEL, COL_OZEL, 'Özel Karakteristik');
+        putH(h1, h2, COL_IYI, COL_IYI, 'İyileştirme Sonrası Özel Karakteristik');
+        putH(h1, h2, COL_ACIK, COL_ACIK, 'Proses Açıklama');
+        putH(h2, h2, 0, 0, 'Proses No');
+        symbols.forEach((s, i) => putH(h2, h2, i + 1, i + 1, s.label));
+        rowIndex += 2;
+
+        // Yalnızca ana prosesler (flowchart sembolü atanmış fonksiyonlar)
+        const flowRows: { step: ProcessStep; func: ProcessStepFunction; first: boolean; span: number }[] = [];
+        (Object.values(data.processItems) as ProcessItem[]).forEach(item => {
+            item.stepIds.forEach(sid => {
+                const step = data.processSteps[sid];
+                if (!step) return;
+                const funcs = step.functionIds.map(fid => data.processStepFunctions[fid]).filter(Boolean).filter((f: ProcessStepFunction) => !!f.flowchartSymbol);
+                funcs.forEach((func, i) => flowRows.push({ step, func, first: i === 0, span: funcs.length }));
+            });
+        });
+
+        let isZebra = false;
+        let lastStep: string | null = null;
+        flowRows.forEach(({ step, func, first, span }) => {
+            if (first && step.id !== lastStep) { isZebra = !isZebra; lastStep = step.id; }
+            const z = (st: any) => isZebra ? { ...st, ...zebraFill } : { ...st };
+
+            // Proses No (step bazlı, birleştirilmiş)
+            if (first) {
+                ws[encCell(rowIndex, 0)] = { v: step.operationNumber || '', t: 's', s: z(bodyCenterStyle) };
+                if (span > 1) merges.push({ s: { r: rowIndex, c: 0 }, e: { r: rowIndex + span - 1, c: 0 } });
+            } else {
+                ws[encCell(rowIndex, 0)] = { v: '', t: 's', s: z(bodyCenterStyle) };
+            }
+            // Sembol kolonları: eşleşen sembolde ●
+            symbols.forEach((s, i) => {
+                ws[encCell(rowIndex, i + 1)] = { v: func.flowchartSymbol === s.key ? '●' : '', t: 's', s: z(bodyCenterStyle) };
+            });
+            ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(func.classificationSymbolBefore), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_IYI)] = { v: clsText(func.classificationSymbolAfter), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_ACIK)] = { v: func.processDescription || func.name || '', t: 's', s: z(bodyStyle) };
+            rowIndex++;
+        });
+
+        const cols = [10, ...symbols.map(() => 8), 16, 18, 42];
+        finalizeAndDownload(ws, merges, cols, LAST, rowIndex - 1, 'Flow', `${fmea.project || 'fmea'}-Flow-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
     return (
     <div ref={tableContainerRef} className="bg-white p-6 rounded-lg shadow-lg overflow-x-auto relative">
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-20">
@@ -239,7 +319,10 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, o
             {lines.map((d, i) => <path key={i} d={d} stroke="#007bff" fill="none" strokeWidth="1.5" markerEnd="url(#arrowhead)" />)}
         </svg>
 
-        <h2 className="text-xl font-bold mb-4 text-gray-700">Flow Diagram View</h2>
+        <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-700">Flow Diagram View</h2>
+            <button onClick={handleExportToExcel} className="px-4 py-1.5 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 shadow-sm relative z-30">Export to Excel</button>
+        </div>
         <div className="overflow-x-auto">
         <table className="min-w-full border-collapse border border-gray-400 bg-white relative z-10">
             <thead className="bg-gray-100 text-gray-700">
