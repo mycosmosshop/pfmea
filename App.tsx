@@ -348,26 +348,31 @@ const App: React.FC = () => {
   const isSyncing = useRef(false);
 
   const [dividerPosition, setDividerPosition] = useState(50); // percentage
-  const [isDraggingActive, setIsDraggingActive] = useState(false);
   const splitPaneRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
 
-  const handleDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handleDividerMouseDown = (e: React.MouseEvent) => {
       e.preventDefault();
-      setIsDraggingActive(true);
+      isDragging.current = true;
   };
 
-  const handleOverlayPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-      if (!splitPaneRef.current) return;
-      const rect = splitPaneRef.current.getBoundingClientRect();
-      const pos = layout === 'horizontal'
-          ? ((e.clientX - rect.left) / rect.width) * 100
-          : ((e.clientY - rect.top) / rect.height) * 100;
-      setDividerPosition(Math.max(10, Math.min(90, pos)));
+  useEffect(() => {
+      const onMove = (e: MouseEvent) => {
+          if (!isDragging.current || !splitPaneRef.current) return;
+          const rect = splitPaneRef.current.getBoundingClientRect();
+          const pos = layout === 'horizontal'
+              ? ((e.clientX - rect.left) / rect.width) * 100
+              : ((e.clientY - rect.top) / rect.height) * 100;
+          setDividerPosition(Math.max(10, Math.min(90, pos)));
+      };
+      const onUp = () => { isDragging.current = false; };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      return () => {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+      };
   }, [layout]);
-
-  const handleOverlayPointerUp = () => {
-      setIsDraggingActive(false);
-  };
   
   useEffect(() => {
     const initializeApp = async () => {
@@ -1713,20 +1718,13 @@ const App: React.FC = () => {
     }
     if (layout === 'vertical') {
       return (
-          <div ref={splitPaneRef} className="flex flex-col flex-grow min-h-0 relative">
-              {isDraggingActive && (
-                  <div
-                      className="fixed inset-0 z-50 cursor-row-resize"
-                      onPointerMove={handleOverlayPointerMove}
-                      onPointerUp={handleOverlayPointerUp}
-                  />
-              )}
+          <div ref={splitPaneRef} className="flex flex-col flex-grow min-h-0">
               <div style={{ height: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
                   {renderViewComponent(leftView)}
               </div>
               <div
-                  onPointerDown={handleDividerPointerDown}
-                  className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group"
+                  onMouseDown={handleDividerMouseDown}
+                  className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group select-none"
                   aria-label="Resize vertical panes"
                   role="separator"
               >
@@ -1742,20 +1740,13 @@ const App: React.FC = () => {
     }
     if (layout === 'horizontal') {
       return (
-          <div ref={splitPaneRef} className="flex flex-row flex-grow min-h-0 relative">
-              {isDraggingActive && (
-                  <div
-                      className="fixed inset-0 z-50 cursor-col-resize"
-                      onPointerMove={handleOverlayPointerMove}
-                      onPointerUp={handleOverlayPointerUp}
-                  />
-              )}
+          <div ref={splitPaneRef} className="flex flex-row flex-grow min-h-0">
                <div style={{ width: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
                   {renderViewComponent(leftView)}
                </div>
                <div
-                  onPointerDown={handleDividerPointerDown}
-                  className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group"
+                  onMouseDown={handleDividerMouseDown}
+                  className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group select-none"
                   aria-label="Resize horizontal panes"
                   role="separator"
               >
