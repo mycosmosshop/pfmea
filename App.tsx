@@ -349,33 +349,28 @@ const App: React.FC = () => {
 
   const [dividerPosition, setDividerPosition] = useState(50); // percentage
   const splitPaneRef = useRef<HTMLDivElement>(null);
-  const isResizing = useRef(false);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
-      isResizing.current = true;
-      document.body.style.cursor = layout === 'horizontal' ? 'col-resize' : 'row-resize';
-      document.body.style.userSelect = 'none';
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const capturedLayout = layout;
 
-      const onMove = (ev: MouseEvent) => {
+      function onMove(ev: PointerEvent) {
           if (!splitPaneRef.current) return;
           const rect = splitPaneRef.current.getBoundingClientRect();
-          const newPosition = layout === 'horizontal'
+          const pos = capturedLayout === 'horizontal'
               ? ((ev.clientX - rect.left) / rect.width) * 100
               : ((ev.clientY - rect.top) / rect.height) * 100;
-          setDividerPosition(Math.max(10, Math.min(90, newPosition)));
-      };
+          setDividerPosition(Math.max(10, Math.min(90, pos)));
+      }
 
-      const onUp = () => {
-          isResizing.current = false;
-          document.body.style.cursor = 'default';
-          document.body.style.userSelect = 'auto';
-          window.removeEventListener('mousemove', onMove);
-          window.removeEventListener('mouseup', onUp);
-      };
+      function onUp(ev: PointerEvent) {
+          (ev.currentTarget as HTMLElement).removeEventListener('pointermove', onMove);
+          (ev.currentTarget as HTMLElement).removeEventListener('pointerup', onUp);
+      }
 
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      e.currentTarget.addEventListener('pointermove', onMove);
+      e.currentTarget.addEventListener('pointerup', onUp);
   }, [layout]);
   
   useEffect(() => {
@@ -1727,7 +1722,7 @@ const App: React.FC = () => {
                   {renderViewComponent(leftView)}
               </div>
               <div
-                  onMouseDown={handleMouseDown}
+                  onPointerDown={handleDividerPointerDown}
                   className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group select-none"
                   aria-label="Resize vertical panes"
                   role="separator"
@@ -1750,7 +1745,7 @@ const App: React.FC = () => {
                   {renderViewComponent(leftView)}
                </div>
                <div
-                  onMouseDown={handleMouseDown}
+                  onPointerDown={handleDividerPointerDown}
                   className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group select-none"
                   aria-label="Resize horizontal panes"
                   role="separator"
