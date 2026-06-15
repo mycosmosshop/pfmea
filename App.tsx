@@ -348,6 +348,10 @@ const App: React.FC = () => {
   const isSyncing = useRef(false);
 
   const [dividerPosition, setDividerPosition] = useState(50); // percentage
+  // Split panonun olculen px boyutu (yatayda genislik, dikeyde yukseklik).
+  // Flexbox icinde yuzde-yukseklik/genislik guvenilir cozulmedigi icin (parent
+  // boyutu flex'ten geldiginden "definite" sayilmaz) divider pozisyonunu PX olarak uygulariz.
+  const [containerPx, setContainerPx] = useState(0);
   const splitPaneRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
@@ -372,6 +376,20 @@ const App: React.FC = () => {
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
       };
+  }, [layout]);
+
+  // Split pano boyutunu olc (ilk render + pencere/icerik degisimlerinde) -> px tabanli divider.
+  useEffect(() => {
+      const el = splitPaneRef.current;
+      if (!el || layout === 'full') return;
+      const update = () => {
+          const r = el.getBoundingClientRect();
+          setContainerPx(layout === 'horizontal' ? r.width : r.height);
+      };
+      update();
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return () => ro.disconnect();
   }, [layout]);
   
   useEffect(() => {
@@ -1719,7 +1737,7 @@ const App: React.FC = () => {
     if (layout === 'vertical') {
       return (
           <div ref={splitPaneRef} className="flex flex-col flex-grow min-h-0">
-              <div style={{ height: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
+              <div style={{ height: containerPx ? `${containerPx * dividerPosition / 100}px` : `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
                   {renderViewComponent(leftView)}
               </div>
               <div
@@ -1741,7 +1759,7 @@ const App: React.FC = () => {
     if (layout === 'horizontal') {
       return (
           <div ref={splitPaneRef} className="flex flex-row flex-grow min-h-0">
-               <div style={{ width: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
+               <div style={{ width: containerPx ? `${containerPx * dividerPosition / 100}px` : `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
                   {renderViewComponent(leftView)}
                </div>
                <div
