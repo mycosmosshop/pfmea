@@ -60,14 +60,18 @@ export async function saveProject(project: FullProjectState): Promise<void> {
   }
 }
 
-// --- Okuma (tek): bulut, hata olursa yerel ---
+// --- Okuma (tek): bulut; bulutta YOKSA veya hata olursa YEREL ---
+// ONEMLI: Bulut erisilebilir ama bu id'de satir yoksa (tablo yeni, proje henuz
+// buluta yuklenmemis) yerele dusulur. Aksi halde dashboard'da gorunen ama yalniz
+// yerelde olan proje acilirken "Project could not be found" hatasi olusur.
 export async function getProject(id: string): Promise<FullProjectState | undefined> {
   try {
     const res = await fetch(`${REST}?id=eq.${encodeURIComponent(id)}&select=data`, { headers: baseHeaders });
     if (!res.ok) throw new Error(String(res.status));
     const rows = await res.json();
     if (Array.isArray(rows) && rows.length > 0) return rows[0].data as FullProjectState;
-    return undefined;
+    // Bulutta yok -> yerelden dene (birlesik dashboard ile tutarli)
+    return await localGet(id);
   } catch {
     return localGet(id);
   }
