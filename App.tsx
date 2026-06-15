@@ -349,29 +349,26 @@ const App: React.FC = () => {
 
   const [dividerPosition, setDividerPosition] = useState(50); // percentage
   const splitPaneRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
 
-  const handleDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+  const handleDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const capturedLayout = layout;
+      isDragging.current = true;
+  };
 
-      function onMove(ev: PointerEvent) {
-          if (!splitPaneRef.current) return;
-          const rect = splitPaneRef.current.getBoundingClientRect();
-          const pos = capturedLayout === 'horizontal'
-              ? ((ev.clientX - rect.left) / rect.width) * 100
-              : ((ev.clientY - rect.top) / rect.height) * 100;
-          setDividerPosition(Math.max(10, Math.min(90, pos)));
-      }
-
-      function onUp(ev: PointerEvent) {
-          (ev.currentTarget as HTMLElement).removeEventListener('pointermove', onMove);
-          (ev.currentTarget as HTMLElement).removeEventListener('pointerup', onUp);
-      }
-
-      e.currentTarget.addEventListener('pointermove', onMove);
-      e.currentTarget.addEventListener('pointerup', onUp);
+  const handleSplitPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDragging.current || !splitPaneRef.current) return;
+      e.preventDefault();
+      const rect = splitPaneRef.current.getBoundingClientRect();
+      const pos = layout === 'horizontal'
+          ? ((e.clientX - rect.left) / rect.width) * 100
+          : ((e.clientY - rect.top) / rect.height) * 100;
+      setDividerPosition(Math.max(10, Math.min(90, pos)));
   }, [layout]);
+
+  const handleSplitPointerUp = () => {
+      isDragging.current = false;
+  };
   
   useEffect(() => {
     const initializeApp = async () => {
@@ -1717,16 +1714,21 @@ const App: React.FC = () => {
     }
     if (layout === 'vertical') {
       return (
-          <div ref={splitPaneRef} className="flex flex-col flex-grow min-h-0">
+          <div
+              ref={splitPaneRef}
+              className="flex flex-col flex-grow min-h-0 select-none"
+              onPointerMove={handleSplitPointerMove}
+              onPointerUp={handleSplitPointerUp}
+              onPointerLeave={handleSplitPointerUp}
+          >
               <div style={{ height: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0">
                   {renderViewComponent(leftView)}
               </div>
               <div
                   onPointerDown={handleDividerPointerDown}
-                  className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group select-none"
+                  className="h-3 flex-shrink-0 cursor-row-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center my-1 rounded group"
                   aria-label="Resize vertical panes"
                   role="separator"
-                  style={{ touchAction: 'none' }}
               >
                   <div className="h-1 w-16 rounded-full bg-gray-500 group-hover:bg-white group-active:bg-white"></div>
               </div>
@@ -1740,16 +1742,21 @@ const App: React.FC = () => {
     }
     if (layout === 'horizontal') {
       return (
-          <div ref={splitPaneRef} className="flex flex-row flex-grow min-h-0">
+          <div
+              ref={splitPaneRef}
+              className="flex flex-row flex-grow min-h-0 select-none"
+              onPointerMove={handleSplitPointerMove}
+              onPointerUp={handleSplitPointerUp}
+              onPointerLeave={handleSplitPointerUp}
+          >
                <div style={{ width: `${dividerPosition}%` }} className="overflow-auto border border-gray-300 rounded-md flex-shrink-0" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
                   {renderViewComponent(leftView)}
                </div>
                <div
                   onPointerDown={handleDividerPointerDown}
-                  className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group select-none"
+                  className="w-3 flex-shrink-0 cursor-col-resize bg-gray-300 hover:bg-blue-500 active:bg-blue-600 transition-colors flex items-center justify-center mx-1 rounded group"
                   aria-label="Resize horizontal panes"
                   role="separator"
-                  style={{ touchAction: 'none' }}
               >
                   <div className="w-1 h-16 rounded-full bg-gray-500 group-hover:bg-white group-active:bg-white"></div>
               </div>
