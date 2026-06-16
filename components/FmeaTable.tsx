@@ -698,7 +698,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.processWorkElement || '—'}</td>
                             
                             {/* Function Analysis */}
-                            {isFirstStepRow && <td rowSpan={stepRowSpans[step.id]} className={tdClass}>{item.name}</td>}
+                            {isFirstStepRow && <td rowSpan={stepRowSpans[step.id]} className={`${tdClass} ${tdClickableClass}`} onClick={() => onOpenModal({ type: 'ProcessItem', data: item })}>{item.name}</td>}
                             {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick}>
                                 {func ? <><div><strong>{func.name}</strong></div><div>{func.productCharacteristic}</div></> : '—' }
                             </td>}
@@ -737,7 +737,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'detection', currentValue: cause.detection })}>{cause?.detection || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.actionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.actionPriority || '—'}</td>
-                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center`}><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
+                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick} title="Click to edit classification / special characteristic"><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.filterCode || '—'}</td>
 
                             <td className="bg-white print:hidden"></td>
@@ -769,7 +769,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             </td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenOccurrenceModal({ targetId: cause.id, field: 'revisedOccurrence', currentValue: cause.revisedOccurrence })}>{cause?.revisedOccurrence || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'revisedDetection', currentValue: cause.revisedDetection })}>{cause?.revisedDetection || '—'}</td>
-                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center`}><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
+                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick} title="Click to edit classification / special characteristic"><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.revisedActionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '—'}</td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.remarks || '—'}</td>
                         </tr>

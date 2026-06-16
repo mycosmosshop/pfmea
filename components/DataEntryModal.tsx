@@ -361,7 +361,12 @@ export const DataEntryModal: React.FC<DataEntryModalProps> = ({ modalConfig, all
         );
         case 'FailureCause': {
             const currentWorkElement = formData.processWorkElement || '';
-            const functionList = registryData?.workElementFunctionsByElement?.[currentWorkElement] || [];
+            const baseFunctionList = registryData?.workElementFunctionsByElement?.[currentWorkElement] || [];
+            // Kayıtlı workElementFunction registry listesinde yoksa da dropdown'da GÖRÜNSÜN
+            // (aksi halde değer veride dolu olmasına ragmen "Select..." görünüyordu).
+            const functionList = formData.workElementFunction && !baseFunctionList.includes(formData.workElementFunction)
+                ? [formData.workElementFunction, ...baseFunctionList]
+                : baseFunctionList;
             
             const { highestSeverityEffect } = failureCauseMemo || {};
             const derivedSeverity = highestSeverityEffect?.severity;

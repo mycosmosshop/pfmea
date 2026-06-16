@@ -75,15 +75,19 @@ const CircleTriangleSRIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
     </svg>
 );
 
-// Üç yıldız özel karakteristik (***) — web'de üç yıldız çizilir; dışa aktarımda metin "***" olur (key='***').
+// Özel karakteristik (***) — parantez içinde üç yıldız; dışa aktarımda metin "(***)" olur (key='(***)').
 const ThreeStarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
-    const star = "M0,-3.4 0.99,-1.05 3.23,-1.05 1.31,0.4 2,2.75 0,1.31 -2,2.75 -1.31,0.4 -3.23,-1.05 -0.99,-1.05 Z";
+    const star = "M0,-3 0.87,-0.93 2.85,-0.93 1.16,0.36 1.76,2.43 0,1.16 -1.76,2.43 -1.16,0.36 -2.85,-0.93 -0.87,-0.93 Z";
     return (
-        <svg viewBox="0 0 24 24" {...props}>
+        <svg viewBox="0 0 32 24" {...props}>
             <g fill="currentColor" stroke="none">
-                <path d={star} transform="translate(5,12)" />
-                <path d={star} transform="translate(12,12)" />
-                <path d={star} transform="translate(19,12)" />
+                <path d={star} transform="translate(10,12)" />
+                <path d={star} transform="translate(16,12)" />
+                <path d={star} transform="translate(22,12)" />
+            </g>
+            <g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M6 4 Q2.5 12 6 20" />
+                <path d="M26 4 Q29.5 12 26 20" />
             </g>
         </svg>
     );
@@ -107,6 +111,6 @@ export const symbols: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> = 
     'circle-triangle-s': CircleTriangleSIcon,
     'circle-triangle-r': CircleTriangleRIcon,
     'circle-triangle-sr': CircleTriangleSRIcon,
-    '***': ThreeStarIcon,
+    '(***)': ThreeStarIcon,
     'plus': PlusSymbol,
 };
