@@ -173,6 +173,19 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
     const thClass = "p-1 border text-xs font-bold uppercase tracking-wider align-middle text-center";
     const tdClass = "p-0.5 border border-gray-400 text-xs align-top";
 
+    // Bir adımın ÖZEL KARAKTERİSTİK'i: gösterilen kutu-fonksiyonda yoksa, AYNI adımın
+    // diğer (kutusuz) karakteristik fonksiyonlarından (ör. yanma hızı) devralınır.
+    // Böylece flow kutusu olmayan bir karakteristiğe atanmış sembol de o op satırında görünür.
+    const effectiveClsSymbol = (step: ProcessStep, ownKey: string | undefined, field: 'classificationSymbolBefore' | 'classificationSymbolAfter'): string | undefined => {
+        if (ownKey) return ownKey;
+        for (const fid of step.functionIds) {
+            const f = data.processStepFunctions[fid] as ProcessStepFunction | undefined;
+            const k = f && (f as any)[field];
+            if (k) return k;
+        }
+        return undefined;
+    };
+
     const renderedRows = Object.values(data.processItems).flatMap((item: ProcessItem) =>
         item.stepIds.map(stepId => {
             const step = data.processSteps[stepId];
@@ -224,8 +237,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
                             </td>
                         );
                     })}
-                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={func.classificationSymbolBefore} registryData={registryData} /></td>
-                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={func.classificationSymbolAfter} registryData={registryData} /></td>
+                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={effectiveClsSymbol(step, func.classificationSymbolBefore, 'classificationSymbolBefore')} registryData={registryData} /></td>
+                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={effectiveClsSymbol(step, func.classificationSymbolAfter, 'classificationSymbolAfter')} registryData={registryData} /></td>
                     <td className={`${tdClass} p-2 align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}>{func.processDescription || func.name}</td>
                 </tr>
             ));
@@ -300,8 +313,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             symbols.forEach((s, i) => {
                 ws[encCell(rowIndex, i + 1)] = { v: func.flowchartSymbol === s.key ? '●' : '', t: 's', s: z(bodyCenterStyle) };
             });
-            ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(func.classificationSymbolBefore), t: 's', s: z(bodyCenterStyle) };
-            ws[encCell(rowIndex, COL_IYI)] = { v: clsText(func.classificationSymbolAfter), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(effectiveClsSymbol(step, func.classificationSymbolBefore, 'classificationSymbolBefore')), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_IYI)] = { v: clsText(effectiveClsSymbol(step, func.classificationSymbolAfter, 'classificationSymbolAfter')), t: 's', s: z(bodyCenterStyle) };
             ws[encCell(rowIndex, COL_ACIK)] = { v: func.processDescription || func.name || '', t: 's', s: z(bodyStyle) };
             rowIndex++;
         });
@@ -426,8 +439,10 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             doc.text(String(fr.step.operationNumber ?? ''), xProc + wProc / 2, cy + 1.5, { align: 'center' });
             // Ozel / Iyilestirme (<!>)
             doc.setFontSize(10); doc.setTextColor(200, 0, 0);
-            if (fr.func.classificationSymbolBefore) doc.text(tr(clsText(fr.func.classificationSymbolBefore)), xOzel + wOzel / 2, cy + 1.6, { align: 'center' });
-            if (fr.func.classificationSymbolAfter) doc.text(tr(clsText(fr.func.classificationSymbolAfter)), xIyi + wIyi / 2, cy + 1.6, { align: 'center' });
+            const _ozelB = effectiveClsSymbol(fr.step, fr.func.classificationSymbolBefore, 'classificationSymbolBefore');
+            const _ozelA = effectiveClsSymbol(fr.step, fr.func.classificationSymbolAfter, 'classificationSymbolAfter');
+            if (_ozelB) doc.text(tr(clsText(_ozelB)), xOzel + wOzel / 2, cy + 1.6, { align: 'center' });
+            if (_ozelA) doc.text(tr(clsText(_ozelA)), xIyi + wIyi / 2, cy + 1.6, { align: 'center' });
             // Aciklama
             doc.setTextColor(0); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
             doc.text(tr(fr.func.processDescription || fr.func.name || ''), xAcik + 3, cy + 1.5, { maxWidth: wAcik - 6 });
