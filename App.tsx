@@ -1896,6 +1896,7 @@ const App: React.FC = () => {
                 allData={data}
                 onClose={() => setTaskManagerOpen(false)}
                 onDataUpdate={handleDataUpdate}
+                onOpenModal={handleOpenModal}
             />
         )}
       </div>

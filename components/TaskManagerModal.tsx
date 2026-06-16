@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { FmeaData, FmeaAction, FailureCause } from '../types';
+import type { FmeaData, FmeaAction, FailureCause, ModalType } from '../types';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
@@ -10,9 +10,10 @@ interface TaskManagerModalProps {
     onClose: () => void;
     onSelect?: (action: FmeaAction) => void;
     onDataUpdate?: (updatedData: FmeaData) => void;
+    onOpenModal?: (modalInfo: ModalType) => void;
 }
 
-export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onClose, onSelect, onDataUpdate }) => {
+export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onClose, onSelect, onDataUpdate, onOpenModal }) => {
     const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
 
     const isManagementMode = !!onDataUpdate;
@@ -27,6 +28,45 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
         return actions;
     }, [allData]);
 
+    // Her aksiyonun kaynak FMEA bağlamı: hangi cause/failureMode/function'a ait.
+    // Böylece bir task'a çift tıklayınca ilgili Failure Cause kaydı FMEA içinde açılabilir.
+    const actionContext = useMemo(() => {
+        const causeToMode: Record<string, string> = {};
+        Object.values(allData.failureModes).forEach((mode: any) => {
+            (mode.causeIds || []).forEach((cid: string) => { causeToMode[cid] = mode.id; });
+        });
+        const modeToFunc: Record<string, string> = {};
+        Object.values(allData.processStepFunctions).forEach((fn: any) => {
+            (fn.failureModeIds || []).forEach((mid: string) => { modeToFunc[mid] = fn.id; });
+        });
+        const map: Record<string, { cause: FailureCause; modeId?: string; funcId?: string }> = {};
+        Object.values(allData.failureCauses).forEach((cause: FailureCause) => {
+            const modeId = causeToMode[cause.id];
+            const funcId = modeId ? modeToFunc[modeId] : undefined;
+            (cause.actions || []).forEach(a => { map[a.id] = { cause, modeId, funcId }; });
+        });
+        return map;
+    }, [allData]);
+
+    // Durum hem İngilizce hem Türkçe olabilir (Completed/Tamamlandı, Cancelled/İptal).
+    const isCompleted = (a: FmeaAction) => {
+        const s = String(a.status || '').toLocaleLowerCase('tr');
+        return s === 'completed' || s.startsWith('tamamla');
+    };
+    const isCancelled = (a: FmeaAction) => {
+        const s = String(a.status || '').toLocaleLowerCase('tr');
+        return s === 'cancelled' || s === 'canceled' || s.startsWith('iptal');
+    };
+
+    // Task'ı kaynağına götür: ilgili Failure Cause kaydını FMEA'da aç (Task Manager kapanır).
+    const navigateToSource = (action: FmeaAction) => {
+        const ctx = actionContext[action.id];
+        if (onOpenModal && ctx && ctx.modeId && ctx.funcId) {
+            onClose();
+            onOpenModal({ type: 'FailureCause', parentId: ctx.modeId, functionId: ctx.funcId, data: ctx.cause });
+        }
+    };
+
     const handleRowClick = (action: FmeaAction) => {
         if (isManagementMode) {
             setSelectedActionId(prev => prev === action.id ? null : action.id);
@@ -35,7 +75,9 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
 
     const handleRowDoubleClick = (action: FmeaAction) => {
         if (onSelect) {
-            onSelect(action);
+            onSelect(action);           // Seçici mod (aksiyon modalından "Add existing task")
+        } else {
+            navigateToSource(action);   // Yönetim modu: kaynağa git
         }
     };
 
@@ -150,17 +192,22 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                     </button>
                 </div>
                 
-                <div className="bg-white px-4 pt-0 pb-4 flex-grow flex flex-col">
+                <div className="bg-white px-4 pt-0 pb-4 flex-grow flex flex-col min-h-0">
                     <div className="w-full py-3 bg-gradient-to-b from-yellow-50 to-yellow-200 border-b-2 border-yellow-400 flex items-center justify-center mb-4 -mx-4">
                         <h2 className="text-2xl font-bold text-blue-800">Task manager</h2>
                     </div>
-                    
-                    <div className="flex justify-end space-x-2 mb-2">
-                        <button onClick={handleExportExcel} className="px-3 py-1 text-sm border rounded bg-gray-200 hover:bg-gray-300 border-gray-500">Export</button>
-                        <button disabled className="px-3 py-1 text-sm border rounded bg-gray-200 border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">Import</button>
+
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs text-gray-500 italic">
+                            {isManagementMode ? 'İpucu: bir göreve çift tıklayınca kaynak FMEA kaydı (Failure Cause) açılır. Tamamlananlar yeşil/üstü çizili gösterilir.' : 'İpucu: bir göreve çift tıklayarak seçin.'}
+                        </span>
+                        <div className="flex space-x-2">
+                            <button onClick={handleExportExcel} className="px-3 py-1 text-sm border rounded bg-gray-200 hover:bg-gray-300 border-gray-500">Export</button>
+                            <button disabled className="px-3 py-1 text-sm border rounded bg-gray-200 border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">Import</button>
+                        </div>
                     </div>
 
-                    <div className="overflow-auto flex-grow border border-gray-400 bg-white">
+                    <div className="overflow-auto flex-grow min-h-0 border border-gray-400 bg-white">
                         <table className="min-w-full">
                             <thead className="sticky top-0">
                                 <tr>
@@ -177,25 +224,35 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                                 </tr>
                             </thead>
                             <tbody>
-                                {allActions.map((action, index) => (
-                                    <tr 
-                                        key={action.id + '_' + index} 
+                                {allActions.map((action, index) => {
+                                    const completed = isCompleted(action);
+                                    const cancelled = isCancelled(action);
+                                    const rowState = selectedActionId === action.id
+                                        ? 'bg-blue-200'
+                                        : completed ? 'bg-green-50 text-gray-500 line-through hover:bg-green-100'
+                                        : cancelled ? 'bg-gray-100 text-gray-400 line-through hover:bg-gray-200'
+                                        : 'even:bg-white odd:bg-gray-50 hover:bg-blue-100';
+                                    return (
+                                    <tr
+                                        key={action.id + '_' + index}
                                         onClick={() => handleRowClick(action)}
-                                        onDoubleClick={() => handleRowDoubleClick(action)} 
-                                        className={`cursor-pointer even:bg-white odd:bg-gray-50 ${selectedActionId === action.id ? 'bg-blue-200' : 'hover:bg-blue-100'}`}
+                                        onDoubleClick={() => handleRowDoubleClick(action)}
+                                        title={isManagementMode ? 'Çift tıkla: kaynak FMEA kaydını aç' : 'Çift tıkla: bu görevi seç'}
+                                        className={`cursor-pointer ${rowState}`}
                                     >
                                         <td className={tdClass}>{action.type === 'prevention' ? 'Prevention Action' : 'Detection Action'}</td>
                                         <td className={tdClass}>{action.description}</td>
                                         <td className={tdClass}>{action.responsiblePerson}</td>
-                                        <td className={tdClass}></td> {/* Position - no data for this */}
-                                        <td className={tdClass}></td> {/* Department - no data for this */}
+                                        <td className={tdClass}></td>
+                                        <td className={tdClass}></td>
                                         <td className={tdClass}>{action.targetCompletionDate}</td>
                                         <td className={tdClass}>{action.status}</td>
                                         <td className={tdClass}>{action.completionDate}</td>
                                         <td className={tdClass}>{action.actionTaken}</td>
                                         <td className={tdClass}>{action.number ?? ''}</td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                                 {allActions.length === 0 && (
                                     <tr><td colSpan={10} className="text-center py-4 text-gray-500">No actions found in project.</td></tr>
                                 )}
