@@ -14,7 +14,7 @@ interface ClassificationModalProps {
 
 const standardSymbolKeys = [
     'none', 'diamond', 'circle-triangle', 'hexagon', 'house', 'shield', 'triangle-down',
-    'circle-triangle-s', 'circle-triangle-r', 'circle-triangle-sr'
+    'circle-triangle-s', 'circle-triangle-r', 'circle-triangle-sr', '***'
 ];
 
 export const ClassificationModal: React.FC<ClassificationModalProps> = ({ onSelectSymbol, onClose, registryData, onUpdateRegistry }) => {
