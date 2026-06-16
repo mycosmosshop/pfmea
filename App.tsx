@@ -378,6 +378,58 @@ const App: React.FC = () => {
       };
   }, [layout]);
 
+  // SAĞ-TIK BASILI SÜRÜKLE = kaydırma (pan). Geniş AIAG&VDA/CP/Flow tablolarında
+  // sağ tuşla tutup sürükleyerek yatay+dikey gezinme. Sürükleme olduysa context menu bastırılır.
+  useEffect(() => {
+      let panX: HTMLElement | null = null, panY: HTMLElement | null = null;
+      let startX = 0, startY = 0, startLeft = 0, startTop = 0, moved = false;
+      // Yatay ve dikey için AYRI ata bul (iç tablo yatay kayar, dış pano dikey kayar).
+      const findAxis = (node: HTMLElement | null, axis: 'x' | 'y'): HTMLElement | null => {
+          let el: HTMLElement | null = node;
+          while (el && el !== document.body) {
+              const s = getComputedStyle(el);
+              if (axis === 'x' && /(auto|scroll)/.test(s.overflowX) && el.scrollWidth > el.clientWidth + 1) return el;
+              if (axis === 'y' && /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
+              el = el.parentElement;
+          }
+          return null;
+      };
+      const onDown = (e: MouseEvent) => {
+          if (e.button !== 2) return; // yalnız sağ tuş
+          const target = e.target as HTMLElement;
+          panX = findAxis(target, 'x');
+          panY = findAxis(target, 'y');
+          if (!panX && !panY) return;
+          startX = e.clientX; startY = e.clientY;
+          startLeft = panX ? panX.scrollLeft : 0;
+          startTop = panY ? panY.scrollTop : 0;
+          moved = false;
+          document.body.style.cursor = 'grabbing';
+          document.body.style.userSelect = 'none';
+      };
+      const onMove = (e: MouseEvent) => {
+          if (!panX && !panY) return;
+          const dx = e.clientX - startX, dy = e.clientY - startY;
+          if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+          if (panX) panX.scrollLeft = startLeft - dx;
+          if (panY) panY.scrollTop = startTop - dy;
+      };
+      const onUp = () => {
+          if (panX || panY) { panX = null; panY = null; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
+      };
+      const onContext = (e: MouseEvent) => { if (moved) { e.preventDefault(); moved = false; } };
+      window.addEventListener('mousedown', onDown);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('contextmenu', onContext);
+      return () => {
+          window.removeEventListener('mousedown', onDown);
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          window.removeEventListener('contextmenu', onContext);
+      };
+  }, []);
+
   // Split pano boyutunu olc (ilk render + pencere/icerik degisimlerinde) -> px tabanli divider.
   useEffect(() => {
       const el = splitPaneRef.current;
