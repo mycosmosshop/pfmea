@@ -34,7 +34,7 @@ const getRpnColor = (rpn: number | undefined, thresholds: { high?: number; mediu
     if (rpn === undefined || rpn === null || isNaN(rpn)) return '';
     if (rpn > highThreshold) return 'bg-red-200';
     if (rpn > mediumThreshold) return 'bg-yellow-200';
-    return '';
+    return 'bg-green-200'; // düşük RPN → yeşil (3. renk)
 };
 
 

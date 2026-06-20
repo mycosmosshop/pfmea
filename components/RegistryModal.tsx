@@ -226,6 +226,12 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({ open, registryData
                                 className="p-2 border border-gray-300 rounded-md w-32"
                             />
                         </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600">Low (Green) &le;</label>
+                            <div className="p-2 border border-gray-200 rounded-md w-32 bg-green-100 text-gray-700 text-sm" title="Orta eşiğin altındaki RPN yeşil gösterilir">
+                                {registryData.rpnThresholdMedium ?? 40} ve altı
+                            </div>
+                        </div>
                     </div>
                 </div>
 

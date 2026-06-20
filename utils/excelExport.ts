@@ -128,5 +128,5 @@ export const rpnFillFor = (rpn: number | undefined, high = 100, medium = 40) => 
   if (rpn === undefined || rpn === null || isNaN(rpn)) return undefined;
   if (rpn > high) return fillH;
   if (rpn > medium) return fillM;
-  return undefined;
+  return fillL; // düşük RPN → yeşil (3. renk)
 };
