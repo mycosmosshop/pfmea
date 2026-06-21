@@ -170,10 +170,21 @@ export interface PfProjectData {
   notes: string;
 }
 
+export interface HistoryEntry {
+  id: string;
+  revision: string;          // Revizyon No
+  date: string;              // Tarih (YYYY-MM-DD)
+  changeDescription: string; // Değişiklik Açıklaması
+  changeReason: string;      // Değişiklik Nedeni
+  preparedBy: string;        // Hazırlayan
+  approvedBy: string;        // Onaylayan
+}
+
 export interface ProjectData {
   fmea: FmeaProjectData;
   cp: CpProjectData;
   pf: PfProjectData;
+  history?: HistoryEntry[];  // Proje/PFMEA değişiklik geçmişi (FR198)
 }
 
 export interface FullProjectState {

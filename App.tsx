@@ -16,6 +16,7 @@ import { DetectionModal } from './components/DetectionModal';
 import { DetectionAssistantModal } from './components/DetectionAssistantModal';
 import AiagViewTable from './components/AiagViewTable';
 import ProjectDataView from './components/ProjectDataView';
+import ProjectHistoryView from './components/ProjectHistoryView';
 import { getAllProjects, saveProject, getProject, deleteProject } from './utils/cloudDb';
 import { ProjectConfigurationView } from './components/ProjectConfigurationView';
 import { TaskManagerModal } from './components/TaskManagerModal';
@@ -23,7 +24,7 @@ import { TaskManagerModal } from './components/TaskManagerModal';
 // Declare global variables for CDN scripts
 declare const XLSX: any;
 
-type EditorView = 'project' | 'tree' | 'config' | 'table' | 'cp' | 'flow' | 'aiag';
+type EditorView = 'project' | 'history' | 'tree' | 'config' | 'table' | 'cp' | 'flow' | 'aiag';
 
 const initialStandardSymbolsData: Omit<FlowchartSymbolDef, 'isStandard'>[] = [
     { key: 'process', label: 'Process — İşlem', svgString: `<svg viewBox="0 0 32 20" fill="#a0c0e0" stroke="black" strokeWidth="1"><rect x="0.5" y="0.5" width="31" height="19"/></svg>` },
@@ -1742,6 +1743,7 @@ const App: React.FC = () => {
   const ViewSelector: React.FC<{ view: EditorView, setView: (view: EditorView) => void, label: string }> = ({ view, setView, label }) => {
     const buttons: { key: EditorView, label: string }[] = [
         { key: 'project', label: 'Project Data' },
+        { key: 'history', label: 'Project History' },
         { key: 'tree', label: 'Tree' },
         { key: 'table', label: 'AIAG & VDA' },
         { key: 'aiag', label: 'AIAG' },
@@ -1772,6 +1774,7 @@ const App: React.FC = () => {
   const renderViewComponent = (view: EditorView) => {
     switch (view) {
         case 'project': return <ProjectDataView data={projectData} onSave={handleProjectDataSave} projectCount={projects.length} onNavigate={handleNavigateProject} />;
+        case 'history': return <ProjectHistoryView data={projectData} onSave={handleProjectDataSave} />;
         case 'config': return <ProjectConfigurationView data={data} projects={projects.filter(p => p.id !== currentProjectId)} onDataUpdate={setData} onCopyToProject={handleCopyToProject} />;
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;
         case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} />;
