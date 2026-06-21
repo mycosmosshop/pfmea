@@ -185,6 +185,7 @@ export interface ProjectData {
   cp: CpProjectData;
   pf: PfProjectData;
   history?: HistoryEntry[];  // Proje/PFMEA değişiklik geçmişi (FR198)
+  historyBaseline?: FmeaData; // Son revizyon kaydı anındaki FMEA durumu (oto-diff için)
 }
 
 export interface FullProjectState {

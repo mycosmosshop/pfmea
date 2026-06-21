@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction } from './types';
+import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction, HistoryEntry } from './types';
+import { diffFmea } from './utils/fmeaDiff';
 import FmeaTreeView from './components/FmeaTreeView';
 import FmeaTable from './components/FmeaTable';
 import ControlPlanTable from './components/ControlPlanTable';
@@ -543,6 +544,41 @@ const App: React.FC = () => {
     const updatedProjects = await getAllProjects();
     setProjects(updatedProjects);
     alert("Project data saved!");
+  };
+
+  // Opsiyonel: son revizyondan beri FMEA tablosundaki değişiklikleri otomatik tespit edip
+  // Project History'ye yeni bir revizyon kaydı olarak ekler (baseline güncellenir).
+  const handleLogRevision = async (currentHistory: HistoryEntry[]) => {
+    if (!currentProjectId) {
+        alert("Önce bir proje açın.");
+        return;
+    }
+    const baseline = projectData.historyBaseline;
+    const changes = diffFmea(baseline, data);
+    if (changes.length === 0) {
+        alert("Son revizyon kaydından beri tabloda bir değişiklik tespit edilmedi.");
+        return;
+    }
+    const MAX = 80;
+    let desc = changes.slice(0, MAX).join('\n');
+    if (changes.length > MAX) desc += `\n… (+${changes.length - MAX} değişiklik daha)`;
+
+    const entry: HistoryEntry = {
+        id: `h_${Date.now().toString(36)}`,
+        revision: projectData.fmea.fmeaNumberVersion || String(currentHistory.length),
+        date: new Date().toISOString().slice(0, 10),
+        changeDescription: desc,
+        changeReason: '',
+        preparedBy: projectData.fmea.fmeaCreator || '',
+        approvedBy: projectData.fmea.fmeaApprover || '',
+    };
+
+    const newProjectData: ProjectData = {
+        ...projectData,
+        history: [...currentHistory, entry],
+        historyBaseline: JSON.parse(JSON.stringify(data)), // yeni temel = mevcut durum
+    };
+    await handleProjectDataSave(newProjectData);
   };
   
   const handleCopyToProject = async (
@@ -1774,7 +1810,7 @@ const App: React.FC = () => {
   const renderViewComponent = (view: EditorView) => {
     switch (view) {
         case 'project': return <ProjectDataView data={projectData} onSave={handleProjectDataSave} projectCount={projects.length} onNavigate={handleNavigateProject} />;
-        case 'history': return <ProjectHistoryView data={projectData} onSave={handleProjectDataSave} />;
+        case 'history': return <ProjectHistoryView data={projectData} onSave={handleProjectDataSave} onLogChanges={handleLogRevision} />;
         case 'config': return <ProjectConfigurationView data={data} projects={projects.filter(p => p.id !== currentProjectId)} onDataUpdate={setData} onCopyToProject={handleCopyToProject} />;
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;
         case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} />;

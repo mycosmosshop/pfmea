@@ -4,6 +4,7 @@ import type { ProjectData, HistoryEntry } from '../types';
 interface ProjectHistoryViewProps {
     data: ProjectData;
     onSave: (newData: ProjectData) => void;
+    onLogChanges?: (currentHistory: HistoryEntry[]) => void; // opsiyonel: tablodaki değişiklikleri otomatik ekle
 }
 
 const inputCls = "w-full text-sm border border-gray-400 bg-white px-2 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500";
@@ -19,7 +20,7 @@ const InfoRow: React.FC<{ label: string; value?: string }> = ({ label, value }) 
     </div>
 );
 
-const ProjectHistoryView: React.FC<ProjectHistoryViewProps> = ({ data, onSave }) => {
+const ProjectHistoryView: React.FC<ProjectHistoryViewProps> = ({ data, onSave, onLogChanges }) => {
     const [history, setHistory] = useState<HistoryEntry[]>(data.history ? [...data.history] : []);
     const f = data.fmea;
 
@@ -78,9 +79,19 @@ const ProjectHistoryView: React.FC<ProjectHistoryViewProps> = ({ data, onSave })
             {/* PFMEA Geçmişi tablosu */}
             <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold text-gray-700">1. PFMEA Geçmişi (PFMEA History)</h3>
-                <button onClick={addRow} className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 transition-colors">
-                    + Revizyon Ekle
-                </button>
+                <div className="flex items-center gap-2">
+                    {onLogChanges && (
+                        <button
+                            onClick={() => onLogChanges(history)}
+                            title="Son revizyon kaydından beri FMEA tablosundaki değişiklikleri otomatik tespit edip yeni satır olarak ekler ve kaydeder."
+                            className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-700 transition-colors">
+                            ⟳ Değişiklikleri Otomatik Ekle
+                        </button>
+                    )}
+                    <button onClick={addRow} className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 transition-colors">
+                        + Revizyon Ekle
+                    </button>
+                </div>
             </div>
 
             <table className="w-full border-collapse">
