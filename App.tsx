@@ -523,21 +523,15 @@ const App: React.FC = () => {
         return;
     }
 
-    // Automatically update revision date
-    const updatedProjectData = {
-        ...newProjectData,
-        fmea: {
-            ...newProjectData.fmea,
-            lastRevisionDate: new Date().toISOString().slice(0, 10),
-        }
-    };
-    setProjectData(updatedProjectData);
+    // NOT: "Last revision date" artık kullanıcının girdiği değerle kaydedilir
+    // (önceden her kayıtta otomatik bugüne eziliyordu → elle değişiklik tutmuyordu).
+    setProjectData(newProjectData);
 
     const projectState: FullProjectState = {
         id: currentProjectId,
         fmeaData: data,
         registryData: registryData,
-        projectData: updatedProjectData,
+        projectData: newProjectData,
     };
 
     await saveProject(projectState);
