@@ -30,6 +30,7 @@ interface FmeaTableProps {
     field: 'detection' | 'revisedDetection';
     currentValue?: number;
   }) => void;
+  onDelete?: (itemType: string, itemId: string) => void;
 }
 
 interface TableRow {
@@ -61,7 +62,7 @@ const joinActionDetails = (actions: FmeaAction[] = [], field: keyof FmeaAction) 
 };
 
 
-const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal }) => {
+const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete }) => {
   const { rows, stepRowSpans, funcRowSpans, modeRowSpans } = useMemo(() => {
     const generatedRows: TableRow[] = [];
     const stepSpans: Record<string, number> = {};
@@ -605,6 +606,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                         <th className={thClass} colSpan={7}>Risk analysis (Step 5)</th>
                         <th className="bg-white w-4 print:hidden"></th>
                         <th className={thClass} colSpan={13}>Optimization (Step 6)</th>
+                        {onDelete && <th rowSpan={2} className={`${thClass} print:hidden`}>İşlem</th>}
                     </tr>
                     <tr>
                         <th className={thClass} rowSpan={2}>1. Process Item System, Subsystem, Part Element or Name of Process</th>
@@ -772,6 +774,23 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick} title="Click to edit classification / special characteristic"><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.revisedActionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '—'}</td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.remarks || '—'}</td>
+                            {onDelete && (
+                                <td className="border border-gray-400 p-1 text-center align-middle print:hidden">
+                                    {cause ? (
+                                        <button
+                                            title="Bu satırı (hata nedenini) sil"
+                                            onClick={(e) => { e.stopPropagation(); if (window.confirm(`Bu satırı silmek istediğinize emin misiniz?\n\nHata Nedeni: "${cause.description || '—'}"`)) onDelete('FailureCause', cause.id); }}
+                                            className="text-red-500 hover:text-white hover:bg-red-600 rounded px-2 py-1 text-sm transition-colors"
+                                        >🗑</button>
+                                    ) : mode ? (
+                                        <button
+                                            title="Bu hata modunu (ve alt satırlarını) sil"
+                                            onClick={(e) => { e.stopPropagation(); if (window.confirm(`Bu hata modunu ve altındaki tüm nedenleri silmek istediğinize emin misiniz?\n\nHata Modu: "${mode.description || '—'}"`)) onDelete('FailureMode', mode.id); }}
+                                            className="text-red-500 hover:text-white hover:bg-red-600 rounded px-2 py-1 text-sm transition-colors"
+                                        >🗑</button>
+                                    ) : null}
+                                </td>
+                            )}
                         </tr>
                     )})}
                     {rows.length === 0 && (
