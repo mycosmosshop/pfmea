@@ -188,14 +188,28 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
         }
         return undefined;
     };
-    // Her fonksiyon YALNIZ KENDİ özel karakteristiğini gösterir (çapraz-fonksiyon devralma YOK).
-    // Kaynak: fonksiyonun before/after sembolü veya kendi nedeninin sembolü.
-    // "Sonra" sütunu ayrı set edilmemişse "önce"ye (taban sembole) düşer.
-    const clsSym = (func: ProcessStepFunction, field: 'classificationSymbolBefore' | 'classificationSymbolAfter'): string | undefined => {
+    // Bir fonksiyonun özel karakteristik tabanı: kendi before/after veya kendi nedeninin sembolü
+    const funcSpecialSymbol = (func: ProcessStepFunction): string | undefined =>
+        func.classificationSymbolBefore || func.classificationSymbolAfter || funcCauseSymbol(func);
+
+    // Akış satırının özel karakteristik sembolü.
+    // 1) Fonksiyonun kendi alanı → 2) kendi tabanı (before/after/neden) →
+    // 3) AYNI adımdaki, KENDİ akış-satırı OLMAYAN (flowchartSymbol'süz) karakteristik
+    //    fonksiyonlarından devral (ör. ana laminasyon satırı, alt "yanma testi" karakteristiğinden).
+    //    Başka akış-satırı olan fonksiyondan (ör. ayrı bir hammadde) DEVRALMAZ.
+    // "Sonra" alanı ayrı girilmemişse "önce" tabanına düşer.
+    const clsSym = (func: ProcessStepFunction, step: ProcessStep, field: 'classificationSymbolBefore' | 'classificationSymbolAfter'): string | undefined => {
         const own = (func as any)[field];
         if (own) return own;
-        const base = func.classificationSymbolBefore || func.classificationSymbolAfter || funcCauseSymbol(func);
-        return base || undefined;
+        const ownBase = funcSpecialSymbol(func);
+        if (ownBase) return ownBase;
+        for (const fid of step.functionIds) {
+            const f = data.processStepFunctions[fid] as ProcessStepFunction | undefined;
+            if (!f || f.id === func.id || f.flowchartSymbol) continue; // başka akış satırından devralma
+            const s = (f as any)[field] || funcSpecialSymbol(f);
+            if (s) return s;
+        }
+        return undefined;
     };
 
     const renderedRows = Object.values(data.processItems).flatMap((item: ProcessItem) =>
@@ -249,8 +263,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
                             </td>
                         );
                     })}
-                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={clsSym(func, 'classificationSymbolBefore')} registryData={registryData} /></td>
-                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={clsSym(func, 'classificationSymbolAfter')} registryData={registryData} /></td>
+                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={clsSym(func, step, 'classificationSymbolBefore')} registryData={registryData} /></td>
+                    <td className={`${tdClass} text-center align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}><ClassificationSymbol symbolKey={clsSym(func, step, 'classificationSymbolAfter')} registryData={registryData} /></td>
                     <td className={`${tdClass} p-2 align-middle cursor-pointer hover:bg-blue-100`} onClick={() => handleFuncClick(func)}>{func.processDescription || func.name}</td>
                 </tr>
             ));
@@ -325,8 +339,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             symbols.forEach((s, i) => {
                 ws[encCell(rowIndex, i + 1)] = { v: func.flowchartSymbol === s.key ? '●' : '', t: 's', s: z(bodyCenterStyle) };
             });
-            ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(clsSym(func, 'classificationSymbolBefore')), t: 's', s: z(bodyCenterStyle) };
-            ws[encCell(rowIndex, COL_IYI)] = { v: clsText(clsSym(func, 'classificationSymbolAfter')), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(clsSym(func, step, 'classificationSymbolBefore')), t: 's', s: z(bodyCenterStyle) };
+            ws[encCell(rowIndex, COL_IYI)] = { v: clsText(clsSym(func, step, 'classificationSymbolAfter')), t: 's', s: z(bodyCenterStyle) };
             ws[encCell(rowIndex, COL_ACIK)] = { v: func.processDescription || func.name || '', t: 's', s: z(bodyStyle) };
             rowIndex++;
         });
@@ -451,8 +465,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             doc.text(String(fr.step.operationNumber ?? ''), xProc + wProc / 2, cy + 1.5, { align: 'center' });
             // Ozel / Iyilestirme (<!>)
             doc.setFontSize(10); doc.setTextColor(200, 0, 0);
-            const _ozelB = clsSym(fr.func, 'classificationSymbolBefore');
-            const _ozelA = clsSym(fr.func, 'classificationSymbolAfter');
+            const _ozelB = clsSym(fr.func, fr.step, 'classificationSymbolBefore');
+            const _ozelA = clsSym(fr.func, fr.step, 'classificationSymbolAfter');
             if (_ozelB) doc.text(tr(clsText(_ozelB)), xOzel + wOzel / 2, cy + 1.6, { align: 'center' });
             if (_ozelA) doc.text(tr(clsText(_ozelA)), xIyi + wIyi / 2, cy + 1.6, { align: 'center' });
             // Aciklama
