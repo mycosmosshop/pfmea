@@ -2,7 +2,7 @@
 
 
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, RegistryData, ProjectData } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { encCell, writeSanifoamAntet, writeProjectInfoLine, finalizeAndDownload, headerBandStyle, bodyStyle, bodyCenterStyle, zebraFill } from '../utils/excelExport';
@@ -28,16 +28,23 @@ interface ControlPlanRow {
 }
 
 const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData, projectData, onOpenModal, onSetReaction }) => {
-  // Reaksiyon planı / sorumlusu override düzenleme (boş bırakılırsa varsayılana döner)
-  const editReaction = (cause: FailureCause | undefined, field: 'reactionPlan' | 'reactionOwner') => {
+  // Reaksiyon Planı modal'ı (her iki alan: plan + sorumlu; boş = varsayılan)
+  const [reactionEdit, setReactionEdit] = useState<{ causeId: string } | null>(null);
+  const [rpPlan, setRpPlan] = useState('');
+  const [rpOwner, setRpOwner] = useState('');
+
+  const openReaction = (cause: FailureCause | undefined) => {
     if (!cause || !onSetReaction) return;
-    const def = field === 'reactionPlan' ? DEFAULT_REACTION : DEFAULT_REACTION_OWNER;
-    const cur = (cause as any)[field] || def;
-    const label = field === 'reactionPlan' ? 'Reaksiyon Planı' : 'Reaksiyon Sorumlusu';
-    const v = window.prompt(`${label} (boş bırakırsan varsayılana döner):`, cur);
-    if (v === null) return;
-    const trimmed = v.trim();
-    onSetReaction(cause.id, field, (trimmed === '' || trimmed === def) ? '' : trimmed);
+    setRpPlan(cause.reactionPlan || '');
+    setRpOwner(cause.reactionOwner || '');
+    setReactionEdit({ causeId: cause.id });
+  };
+  const saveReaction = () => {
+    if (!reactionEdit || !onSetReaction) return;
+    const plan = rpPlan.trim(), owner = rpOwner.trim();
+    onSetReaction(reactionEdit.causeId, 'reactionPlan', (plan === '' || plan === DEFAULT_REACTION) ? '' : plan);
+    onSetReaction(reactionEdit.causeId, 'reactionOwner', (owner === '' || owner === DEFAULT_REACTION_OWNER) ? '' : owner);
+    setReactionEdit(null);
   };
   const { rows, stepRowSpans, funcRowSpans } = useMemo(() => {
     const generatedRows: ControlPlanRow[] = [];
@@ -203,6 +210,31 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
   };
 
   return (
+    <>
+    {reactionEdit && (
+      <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" onClick={() => setReactionEdit(null)}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5 m-4 font-sans" onClick={e => e.stopPropagation()}>
+          <div className="flex justify-between items-center border-b pb-2 mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">Reaksiyon Planı (Reaction Plan)</h3>
+            <button onClick={() => setReactionEdit(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          </div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Reaksiyon Planı / Action</label>
+          <textarea rows={5} value={rpPlan} onChange={e => setRpPlan(e.target.value)} placeholder={DEFAULT_REACTION}
+            className="w-full text-sm border border-gray-400 rounded px-2 py-1.5 mb-3 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sorumlu / Owner</label>
+          <input type="text" value={rpOwner} onChange={e => setRpOwner(e.target.value)} placeholder={DEFAULT_REACTION_OWNER}
+            className="w-full text-sm border border-gray-400 rounded px-2 py-1.5 mb-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+          <p className="text-xs text-gray-400 mb-4">Boş bırakırsan varsayılan kullanılır: Acil Eylem Planı (PL92) + DÖF (PR14) / Kalite Sorumlusu.</p>
+          <div className="flex justify-between items-center">
+            <button onClick={() => { setRpPlan(''); setRpOwner(''); }} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Varsayılana Dön</button>
+            <div className="flex gap-2">
+              <button onClick={() => setReactionEdit(null)} className="px-4 py-1.5 text-sm bg-gray-200 text-gray-800 rounded hover:bg-gray-300">İptal</button>
+              <button onClick={saveReaction} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Kaydet</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="bg-white p-6 rounded-lg shadow-lg overflow-x-auto">
         <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-700">Control Plan (CP) View</h2>
@@ -288,8 +320,8 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                                 </>
                             )}
                             <td className={`${tdClass} min-w-[170px] ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
-                            <td className={`${tdClass} min-w-[340px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon planı — tıklayarak bu satır için özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionPlan')}>{cause ? (cause.reactionPlan || DEFAULT_REACTION) : '—'}</td>
-                            <td className={`${tdClass} min-w-[150px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon sorumlusu — tıklayarak özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionOwner')}>{cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '—'}</td>
+                            <td className={`${tdClass} min-w-[340px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon planını düzenle (boş = varsayılan)" onClick={() => openReaction(cause)}>{cause ? (cause.reactionPlan || DEFAULT_REACTION) : '—'}</td>
+                            <td className={`${tdClass} min-w-[150px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon sorumlusunu düzenle (boş = varsayılan)" onClick={() => openReaction(cause)}>{cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '—'}</td>
                         </tr>
                     )
                 })}
@@ -301,6 +333,7 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
             </tbody>
         </table>
     </div>
+    </>
   );
 };
 
