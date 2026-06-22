@@ -9,6 +9,7 @@ import { DataEntryModal } from './components/DataEntryModal';
 import FailureEffectModal from './components/FailureEffectModal';
 import { RegistryModal } from './components/RegistryModal';
 import { APClassificationModal } from './components/APClassificationModal';
+import { ClassificationModal } from './components/ClassificationModal';
 import { SeverityModal } from './components/SeverityModal';
 import { OccurrenceModal } from './components/OccurrenceModal';
 import { initialApMatrix } from './utils/ap-matrix';
@@ -317,6 +318,7 @@ const App: React.FC = () => {
   const [projectData, setProjectData] = useState<ProjectData>(initialProjectData);
   
   const [modal, setModal] = useState<ModalType>(null);
+  const [causeClsModal, setCauseClsModal] = useState<{ causeId: string } | null>(null); // satır-bazlı özel karakteristik seçimi
   const [provisionalItemInfo, setProvisionalItemInfo] = useState<{ type: string, id: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isApModalOpen, setIsApModalOpen] = useState(false);
@@ -573,6 +575,18 @@ const App: React.FC = () => {
         historyBaseline: JSON.parse(JSON.stringify(data)), // yeni temel = mevcut durum
     };
     await handleProjectDataSave(newProjectData);
+  };
+
+  // Satır (failure cause) bazlı özel karakteristik sembolü ata/temizle
+  const handleSetCauseClassification = (causeId: string, symbol: string) => {
+    setData(prev => {
+        if (!prev.failureCauses[causeId]) return prev;
+        const next: FmeaData = JSON.parse(JSON.stringify(prev));
+        // 'none' veya boş → temizle
+        next.failureCauses[causeId].classificationSymbol = (!symbol || symbol === 'none') ? undefined : symbol;
+        return next;
+    });
+    setCauseClsModal(null);
   };
   
   const handleCopyToProject = async (
@@ -1807,7 +1821,7 @@ const App: React.FC = () => {
         case 'history': return <ProjectHistoryView data={projectData} onSave={handleProjectDataSave} onLogChanges={handleLogRevision} />;
         case 'config': return <ProjectConfigurationView data={data} projects={projects.filter(p => p.id !== currentProjectId)} onDataUpdate={setData} onCopyToProject={handleCopyToProject} />;
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;
-        case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onDelete={handleDelete} />;
+        case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onDelete={handleDelete} onOpenClassification={(causeId) => setCauseClsModal({ causeId })} />;
         case 'aiag': return <AiagViewTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
         case 'cp': return <ControlPlanTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
         case 'flow': return <FlowDiagramView data={data} onDataChange={setData} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} onAddNewFunctionWithSymbol={handleAddNewFunctionWithSymbol} />;
@@ -1935,6 +1949,14 @@ const App: React.FC = () => {
             registryData={registryData}
             onClose={handleCloseModal}
             onUpdateRegistry={handleUpdateRegistry}
+          />
+        )}
+        {causeClsModal && (
+          <ClassificationModal
+            registryData={registryData}
+            onUpdateRegistry={handleUpdateRegistry}
+            onClose={() => setCauseClsModal(null)}
+            onSelectSymbol={(symbol) => handleSetCauseClassification(causeClsModal.causeId, symbol)}
           />
         )}
         <APClassificationModal

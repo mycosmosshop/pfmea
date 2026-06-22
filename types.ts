@@ -52,6 +52,7 @@ export interface FailureCause {
   detection?: number;
   actionPriority?: string;
   filterCode?: string;
+  classificationSymbol?: string; // Bu satıra (nedene) özgü özel karakteristik sembolü (Spec. Characteristic)
   // Step 6: Optimization
   actions: FmeaAction[];
   revisedSeverity?: number;

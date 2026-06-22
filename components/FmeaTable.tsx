@@ -31,6 +31,7 @@ interface FmeaTableProps {
     currentValue?: number;
   }) => void;
   onDelete?: (itemType: string, itemId: string) => void;
+  onOpenClassification?: (causeId: string, currentSymbol?: string) => void;
 }
 
 interface TableRow {
@@ -62,7 +63,7 @@ const joinActionDetails = (actions: FmeaAction[] = [], field: keyof FmeaAction) 
 };
 
 
-const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete }) => {
+const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete, onOpenClassification }) => {
   const { rows, stepRowSpans, funcRowSpans, modeRowSpans } = useMemo(() => {
     const generatedRows: TableRow[] = [];
     const stepSpans: Record<string, number> = {};
@@ -184,7 +185,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.detectionControl,
             cause?.detection,
             cause?.actionPriority,
-            clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter),
+            clsLabel(cause?.classificationSymbol),
             cause?.filterCode,
             joinActionDetails(preventionActions, 'description'),
             joinActionDetails(detectionActions, 'description'),
@@ -196,7 +197,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.revisedSeverity,
             cause?.revisedOccurrence,
             cause?.revisedDetection,
-            clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter),
+            clsLabel(cause?.classificationSymbol),
             cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
             cause?.remarks,
         ];
@@ -348,7 +349,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.detectionControl },
             { v: cause?.detection },
             { v: cause?.actionPriority },
-            { v: clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter), first: isFirstFuncRow, span: funcRowSpans[func?.id] },
+            { v: clsLabel(cause?.classificationSymbol) },
             { v: cause?.filterCode },
             { v: joinActionDetails(preventionActions, 'description') },
             { v: joinActionDetails(detectionActions, 'description') },
@@ -360,7 +361,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.revisedSeverity },
             { v: cause?.revisedOccurrence },
             { v: cause?.revisedDetection },
-            { v: clsLabel(func?.classificationSymbolBefore || func?.classificationSymbolAfter), first: isFirstFuncRow, span: funcRowSpans[func?.id] },
+            { v: clsLabel(cause?.classificationSymbol) },
             { v: cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '' },
             { v: cause?.remarks }
         ];
@@ -739,7 +740,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'detection', currentValue: cause.detection })}>{cause?.detection || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.actionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.actionPriority || '—'}</td>
-                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick} title="Click to edit classification / special characteristic"><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
+                            <td className={`${tdClass} text-center ${cause && onOpenClassification ? tdClickableClass : ''}`} onClick={() => cause && onOpenClassification && onOpenClassification(cause.id, cause.classificationSymbol)} title="Özel karakteristik sembolü (bu satır için) — tıklayarak ata/temizle">
+                                {cause?.classificationSymbol ? <ClassificationSymbol symbolKey={cause.classificationSymbol} registryData={registryData} /> : (cause ? '—' : '')}
+                            </td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.filterCode || '—'}</td>
 
                             <td className="bg-white print:hidden"></td>
@@ -771,7 +774,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             </td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenOccurrenceModal({ targetId: cause.id, field: 'revisedOccurrence', currentValue: cause.revisedOccurrence })}>{cause?.revisedOccurrence || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'revisedDetection', currentValue: cause.revisedDetection })}>{cause?.revisedDetection || '—'}</td>
-                            {isFirstFuncRow && <td rowSpan={funcRowSpans[func?.id] || 1} className={`${tdClass} text-center ${isFuncCellClickable ? tdClickableClass : ''}`} onClick={handleFuncClick} title="Click to edit classification / special characteristic"><ClassificationSymbol symbolKey={func?.classificationSymbolBefore || func?.classificationSymbolAfter} registryData={registryData} /></td>}
+                            <td className={`${tdClass} text-center ${cause && onOpenClassification ? tdClickableClass : ''}`} onClick={() => cause && onOpenClassification && onOpenClassification(cause.id, cause.classificationSymbol)} title="Özel karakteristik sembolü (bu satır için) — tıklayarak ata/temizle">
+                                {cause?.classificationSymbol ? <ClassificationSymbol symbolKey={cause.classificationSymbol} registryData={registryData} /> : (cause ? '—' : '')}
+                            </td>
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.revisedActionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '—'}</td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.remarks || '—'}</td>
                             {onDelete && (
