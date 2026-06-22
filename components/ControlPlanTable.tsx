@@ -167,8 +167,8 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
         { v: func?.sampleSize || '', first: isFirstFuncRow, span: funcSpan },
         { v: func?.sampleFrequency || '', first: isFirstFuncRow, span: funcSpan },
         { v: cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '') : '') },
-        { v: cause?.detectionAction || '' },
-        { v: cause?.responsiblePerson || '' },
+        { v: (cause?.actions || []).map(a => a.actionTaken || a.description).filter(Boolean).join('; ') },
+        { v: [...new Set((cause?.actions || []).map(a => a.responsiblePerson).filter(Boolean))].join(', ') },
       ];
 
       cells.forEach((cell, c) => {
@@ -272,8 +272,8 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                                 </>
                             )}
                             <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionAction || '—'}</td>
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.responsiblePerson || '—'}</td>
+                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{(cause?.actions || []).map(a => a.actionTaken || a.description).filter(Boolean).join('; ') || '—'}</td>
+                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{[...new Set((cause?.actions || []).map(a => a.responsiblePerson).filter(Boolean))].join(', ') || '—'}</td>
                         </tr>
                     )
                 })}
