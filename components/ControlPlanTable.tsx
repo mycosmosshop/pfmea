@@ -226,9 +226,9 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                     <th className={thClass} rowSpan={2}>Process</th>
                     <th className={thClass} rowSpan={2}>Evaluation/Measurement Technique</th>
                     <th className={thClass} colSpan={2}>Sample</th>
-                    <th className={thClass} rowSpan={2}>Control Method</th>
-                    <th className={thClass} rowSpan={2}>Action</th>
-                    <th className={thClass} rowSpan={2}>Owner/Responsible person</th>
+                    <th className={`${thClass} min-w-[170px]`} rowSpan={2}>Control Method</th>
+                    <th className={`${thClass} min-w-[340px]`} rowSpan={2}>Action</th>
+                    <th className={`${thClass} min-w-[150px]`} rowSpan={2}>Owner/Responsible person</th>
                 </tr>
                  <tr>
                     <th className={thClass}>Size</th>
@@ -287,9 +287,9 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                                     <td className={tdClass}></td>
                                 </>
                             )}
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
-                            <td className={`${tdClass} ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon planı — tıklayarak bu satır için özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionPlan')}>{cause ? (cause.reactionPlan || DEFAULT_REACTION) : '—'}</td>
-                            <td className={`${tdClass} ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon sorumlusu — tıklayarak özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionOwner')}>{cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '—'}</td>
+                            <td className={`${tdClass} min-w-[170px] ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
+                            <td className={`${tdClass} min-w-[340px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon planı — tıklayarak bu satır için özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionPlan')}>{cause ? (cause.reactionPlan || DEFAULT_REACTION) : '—'}</td>
+                            <td className={`${tdClass} min-w-[150px] ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon sorumlusu — tıklayarak özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionOwner')}>{cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '—'}</td>
                         </tr>
                     )
                 })}
