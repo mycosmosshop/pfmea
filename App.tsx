@@ -577,6 +577,16 @@ const App: React.FC = () => {
     await handleProjectDataSave(newProjectData);
   };
 
+  // Kontrol Planı reaksiyon planı / sorumlusu override (boş → varsayılana döner)
+  const handleSetCauseReaction = (causeId: string, field: 'reactionPlan' | 'reactionOwner', value: string) => {
+    setData(prev => {
+        if (!prev.failureCauses[causeId]) return prev;
+        const next: FmeaData = JSON.parse(JSON.stringify(prev));
+        (next.failureCauses[causeId] as any)[field] = value || undefined;
+        return next;
+    });
+  };
+
   // Satır (failure cause) bazlı özel karakteristik sembolü ata/temizle
   const handleSetCauseClassification = (causeId: string, symbol: string) => {
     setData(prev => {
@@ -1835,7 +1845,7 @@ const App: React.FC = () => {
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;
         case 'table': return <FmeaTable data={data} registryData={registryData} projectData={projectData} onOpenModal={handleOpenModal} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onDelete={handleDelete} onOpenClassification={(causeId) => setCauseClsModal({ causeId })} />;
         case 'aiag': return <AiagViewTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
-        case 'cp': return <ControlPlanTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} />;
+        case 'cp': return <ControlPlanTable data={data} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} onSetReaction={handleSetCauseReaction} />;
         case 'flow': return <FlowDiagramView data={data} onDataChange={setData} onOpenModal={handleOpenModal} registryData={registryData} projectData={projectData} onAddNewFunctionWithSymbol={handleAddNewFunctionWithSymbol} />;
         default: return null;
     }

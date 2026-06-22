@@ -12,7 +12,12 @@ interface ControlPlanTableProps {
   registryData: RegistryData;
   projectData: ProjectData;
   onOpenModal: (modalInfo: ModalType) => void;
+  onSetReaction?: (causeId: string, field: 'reactionPlan' | 'reactionOwner', value: string) => void;
 }
+
+// Varsayılan reaksiyon planı (kontrol planı PDF'leri: Acil Eylem PL92 + DÖF PR14). Satır bazında override edilebilir.
+const DEFAULT_REACTION = 'Uygunsuz sonuç tespitinde: ürün karantinaya alınır ve etiketlenir; %100 ayıklama / tedarikçiye iade; DÖF başlatılır (PR14); gerekirse Acil Eylem Planı (PL92) uygulanır.';
+const DEFAULT_REACTION_OWNER = 'Kalite Sorumlusu';
 
 interface ControlPlanRow {
     step: ProcessStep;
@@ -22,7 +27,18 @@ interface ControlPlanRow {
     cause?: FailureCause;
 }
 
-const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData, projectData, onOpenModal }) => {
+const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData, projectData, onOpenModal, onSetReaction }) => {
+  // Reaksiyon planı / sorumlusu override düzenleme (boş bırakılırsa varsayılana döner)
+  const editReaction = (cause: FailureCause | undefined, field: 'reactionPlan' | 'reactionOwner') => {
+    if (!cause || !onSetReaction) return;
+    const def = field === 'reactionPlan' ? DEFAULT_REACTION : DEFAULT_REACTION_OWNER;
+    const cur = (cause as any)[field] || def;
+    const label = field === 'reactionPlan' ? 'Reaksiyon Planı' : 'Reaksiyon Sorumlusu';
+    const v = window.prompt(`${label} (boş bırakırsan varsayılana döner):`, cur);
+    if (v === null) return;
+    const trimmed = v.trim();
+    onSetReaction(cause.id, field, (trimmed === '' || trimmed === def) ? '' : trimmed);
+  };
   const { rows, stepRowSpans, funcRowSpans } = useMemo(() => {
     const generatedRows: ControlPlanRow[] = [];
     const stepSpans: Record<string, number> = {};
@@ -167,8 +183,8 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
         { v: func?.sampleSize || '', first: isFirstFuncRow, span: funcSpan },
         { v: func?.sampleFrequency || '', first: isFirstFuncRow, span: funcSpan },
         { v: cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '') : '') },
-        { v: (cause?.actions || []).map(a => a.actionTaken || a.description).filter(Boolean).join('; ') },
-        { v: [...new Set((cause?.actions || []).map(a => a.responsiblePerson).filter(Boolean))].join(', ') },
+        { v: cause ? (cause.reactionPlan || DEFAULT_REACTION) : '' },
+        { v: cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '' },
       ];
 
       cells.forEach((cell, c) => {
@@ -272,8 +288,8 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                                 </>
                             )}
                             <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{(cause?.actions || []).map(a => a.actionTaken || a.description).filter(Boolean).join('; ') || '—'}</td>
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{[...new Set((cause?.actions || []).map(a => a.responsiblePerson).filter(Boolean))].join(', ') || '—'}</td>
+                            <td className={`${tdClass} ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon planı — tıklayarak bu satır için özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionPlan')}>{cause ? (cause.reactionPlan || DEFAULT_REACTION) : '—'}</td>
+                            <td className={`${tdClass} ${cause && onSetReaction ? tdClickableClass : ''}`} title="Reaksiyon sorumlusu — tıklayarak özelleştir (boş = varsayılan)" onClick={() => editReaction(cause, 'reactionOwner')}>{cause ? (cause.reactionOwner || DEFAULT_REACTION_OWNER) : '—'}</td>
                         </tr>
                     )
                 })}

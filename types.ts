@@ -53,6 +53,8 @@ export interface FailureCause {
   actionPriority?: string;
   filterCode?: string;
   classificationSymbol?: string; // Bu satıra (nedene) özgü özel karakteristik sembolü (Spec. Characteristic)
+  reactionPlan?: string;  // Kontrol Planı reaksiyon planı override'ı (boşsa varsayılan PL92/PR14 metni)
+  reactionOwner?: string; // Kontrol Planı reaksiyon sorumlusu override'ı (boşsa varsayılan)
   // Step 6: Optimization
   actions: FmeaAction[];
   revisedSeverity?: number;
