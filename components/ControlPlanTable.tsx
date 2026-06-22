@@ -166,7 +166,7 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
         { v: func?.evaluationMeasurementTechnique || '', first: isFirstFuncRow, span: funcSpan },
         { v: func?.sampleSize || '', first: isFirstFuncRow, span: funcSpan },
         { v: func?.sampleFrequency || '', first: isFirstFuncRow, span: funcSpan },
-        { v: cause?.description || (isFirstFuncRow ? (func?.controlMethod || '') : '') },
+        { v: cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '') : '') },
         { v: cause?.detectionAction || '' },
         { v: cause?.responsiblePerson || '' },
       ];
@@ -271,7 +271,7 @@ const ControlPlanTable: React.FC<ControlPlanTableProps> = ({ data, registryData,
                                     <td className={tdClass}></td>
                                 </>
                             )}
-                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.description || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
+                            <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionControl || (isFirstFuncRow ? (func?.controlMethod || '—') : '')}</td>
                             <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.detectionAction || '—'}</td>
                             <td className={`${tdClass} ${cause ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.responsiblePerson || '—'}</td>
                         </tr>
