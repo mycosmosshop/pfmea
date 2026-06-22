@@ -64,6 +64,24 @@ const joinActionDetails = (actions: FmeaAction[] = [], field: keyof FmeaAction) 
 
 
 const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete, onOpenClassification }) => {
+  // Özel karakteristik eşgüdümü: satır(neden) ana kaynak; fonksiyon seviyesinde
+  // tanımlı (Flow'dan/fonksiyon modalından) ama hiçbir nedeninde sembol yoksa,
+  // fonksiyonun ilk nedeninde göster (tüm satırlara yaymadan). Flow & FMEA tutarlı olur.
+  const funcFallbackSym: Record<string, { causeId: string; symbol: string }> = {};
+  Object.values(data.processStepFunctions).forEach((f: any) => {
+    const sym = f.classificationSymbolBefore || f.classificationSymbolAfter;
+    if (!(f.classificationSpecialCharacteristic && sym)) return;
+    const causeIds = (f.failureModeIds || []).flatMap((mid: string) => data.failureModes[mid]?.causeIds || []);
+    const anyCauseSym = causeIds.some((cid: string) => data.failureCauses[cid]?.classificationSymbol);
+    if (!anyCauseSym && causeIds.length) funcFallbackSym[f.id] = { causeId: causeIds[0], symbol: sym };
+  });
+  // Bir satırda gösterilecek özel karakteristik sembolü
+  const rowClsSymbol = (func?: any, cause?: any): string | undefined => {
+    if (cause?.classificationSymbol) return cause.classificationSymbol;
+    const fb = func && funcFallbackSym[func.id];
+    return (fb && cause && fb.causeId === cause.id) ? fb.symbol : undefined;
+  };
+
   const { rows, stepRowSpans, funcRowSpans, modeRowSpans } = useMemo(() => {
     const generatedRows: TableRow[] = [];
     const stepSpans: Record<string, number> = {};
@@ -185,7 +203,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.detectionControl,
             cause?.detection,
             cause?.actionPriority,
-            clsLabel(cause?.classificationSymbol),
+            clsLabel(rowClsSymbol(func, cause)),
             cause?.filterCode,
             joinActionDetails(preventionActions, 'description'),
             joinActionDetails(detectionActions, 'description'),
@@ -197,7 +215,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             cause?.revisedSeverity,
             cause?.revisedOccurrence,
             cause?.revisedDetection,
-            clsLabel(cause?.classificationSymbol),
+            clsLabel(rowClsSymbol(func, cause)),
             cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
             cause?.remarks,
         ];
@@ -349,7 +367,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.detectionControl },
             { v: cause?.detection },
             { v: cause?.actionPriority },
-            { v: clsLabel(cause?.classificationSymbol) },
+            { v: clsLabel(rowClsSymbol(func, cause)) },
             { v: cause?.filterCode },
             { v: joinActionDetails(preventionActions, 'description') },
             { v: joinActionDetails(detectionActions, 'description') },
@@ -361,7 +379,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
             { v: cause?.revisedSeverity },
             { v: cause?.revisedOccurrence },
             { v: cause?.revisedDetection },
-            { v: clsLabel(cause?.classificationSymbol) },
+            { v: clsLabel(rowClsSymbol(func, cause)) },
             { v: cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '' },
             { v: cause?.remarks }
         ];
@@ -741,7 +759,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'detection', currentValue: cause.detection })}>{cause?.detection || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.actionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.actionPriority || '—'}</td>
                             <td className={`${tdClass} text-center ${cause && onOpenClassification ? tdClickableClass : ''}`} onClick={() => cause && onOpenClassification && onOpenClassification(cause.id, cause.classificationSymbol)} title="Özel karakteristik sembolü (bu satır için) — tıklayarak ata/temizle">
-                                {cause?.classificationSymbol ? <ClassificationSymbol symbolKey={cause.classificationSymbol} registryData={registryData} /> : (cause ? '—' : '')}
+                                {rowClsSymbol(func, cause) ? <ClassificationSymbol symbolKey={rowClsSymbol(func, cause)} registryData={registryData} /> : (cause ? '—' : '')}
                             </td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.filterCode || '—'}</td>
 
@@ -775,7 +793,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenOccurrenceModal({ targetId: cause.id, field: 'revisedOccurrence', currentValue: cause.revisedOccurrence })}>{cause?.revisedOccurrence || '—'}</td>
                             <td className={`${tdClass} text-center font-bold ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={() => cause && onOpenDetectionModal({ targetId: cause.id, field: 'revisedDetection', currentValue: cause.revisedDetection })}>{cause?.revisedDetection || '—'}</td>
                             <td className={`${tdClass} text-center ${cause && onOpenClassification ? tdClickableClass : ''}`} onClick={() => cause && onOpenClassification && onOpenClassification(cause.id, cause.classificationSymbol)} title="Özel karakteristik sembolü (bu satır için) — tıklayarak ata/temizle">
-                                {cause?.classificationSymbol ? <ClassificationSymbol symbolKey={cause.classificationSymbol} registryData={registryData} /> : (cause ? '—' : '')}
+                                {rowClsSymbol(func, cause) ? <ClassificationSymbol symbolKey={rowClsSymbol(func, cause)} registryData={registryData} /> : (cause ? '—' : '')}
                             </td>
                             <td className={`${tdClass} text-center font-bold ${getAPBackgroundColor(cause?.revisedActionPriority)} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '—'}</td>
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.remarks || '—'}</td>

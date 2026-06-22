@@ -582,8 +582,20 @@ const App: React.FC = () => {
     setData(prev => {
         if (!prev.failureCauses[causeId]) return prev;
         const next: FmeaData = JSON.parse(JSON.stringify(prev));
-        // 'none' veya boş → temizle
-        next.failureCauses[causeId].classificationSymbol = (!symbol || symbol === 'none') ? undefined : symbol;
+        const sym = (!symbol || symbol === 'none') ? undefined : symbol;
+        next.failureCauses[causeId].classificationSymbol = sym;
+        // EŞGÜDÜM: nedene sembol konunca üst fonksiyonu da özel-karakteristik yap
+        // (Flow diyagramı ve Kontrol Planı fonksiyon seviyesini okur → orada da görünür).
+        if (sym) {
+            const modeId = Object.keys(next.failureModes).find(m => (next.failureModes[m].causeIds || []).includes(causeId));
+            const funcId = modeId && Object.keys(next.processStepFunctions).find(f => (next.processStepFunctions[f].failureModeIds || []).includes(modeId));
+            if (funcId) {
+                const func: any = next.processStepFunctions[funcId];
+                func.classificationSpecialCharacteristic = true;
+                if (!func.classificationSymbolBefore) func.classificationSymbolBefore = sym; // mevcut sembolü ezme
+                if (!func.classificationSymbolAfter) func.classificationSymbolAfter = sym;
+            }
+        }
         return next;
     });
     setCauseClsModal(null);
