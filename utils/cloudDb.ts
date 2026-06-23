@@ -81,21 +81,20 @@ export async function getProject(id: string): Promise<FullProjectState | undefin
 // Birlestirme sayesinde: tablo yeni acildiginda (bulut bos) mevcut yerel projeler
 // kaybolmaz; kullanici Save'e basinca buluta cikar ve herkese gorunur olur.
 export async function getAllProjects(): Promise<FullProjectState[]> {
-  const local = await localGetAll().catch(() => [] as FullProjectState[]);
   try {
     const res = await fetch(`${REST}?select=data&order=updated_at.desc`, { headers: baseHeaders });
     if (!res.ok) throw new Error(String(res.status));
     const rows = await res.json();
     const cloud = (Array.isArray(rows) ? rows : []).map((r: any) => r.data as FullProjectState).filter(Boolean);
-    // Bulut basariliysa yerel onbellegi tazele (cevrimdisi yedek guncel kalsin)
+    // Yerel onbellegi bulutla tazele (cevrimdisi yedek guncel kalsin)
     Promise.all(cloud.map(p => localSave(p).catch(() => {}))).catch(() => {});
-    // Birlestir: bulut oncelikli, yerelde olup bulutta olmayanlari ekle
-    const byId = new Map<string, FullProjectState>();
-    local.forEach(p => byId.set((p as any).id, p));
-    cloud.forEach(p => byId.set((p as any).id, p)); // bulut yereli ezer
-    return Array.from(byId.values());
+    // BULUT YETKILI: cevrimiciyken yalniz bulut projeleri gosterilir. Yerel "hayalet"
+    // (baska cihazda silinmis ama bu cihazin onbelleginde kalmis) projeler birlestirilmez
+    // -> CIFT kayit olmaz. Yerel onbellek yalniz cevrimdisi yedek olarak (catch) kullanilir.
+    return cloud;
   } catch {
-    return local;
+    // Cevrimdisi: son bilinen yerel onbellek
+    return localGetAll().catch(() => [] as FullProjectState[]);
   }
 }
 
