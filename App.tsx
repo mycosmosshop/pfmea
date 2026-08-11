@@ -1787,8 +1787,9 @@ const App: React.FC = () => {
                 aria-label="Search projects"
             />
         </div>
-        <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-          <table className="min-w-full">
+        {/* overflow-hidden tabloyu KIRPIYORDU (Actions sütunu görünmüyordu) → yatay kaydırma */}
+        <div className="bg-white shadow-lg rounded-lg overflow-x-auto">
+          <table className="min-w-full whitespace-nowrap">
             <thead className="bg-gray-200">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Project Name</th>
