@@ -166,15 +166,22 @@ export const DataEntryModal: React.FC<DataEntryModalProps> = ({ modalConfig, all
   };
 
   const handleSelectSymbol = (symbol: string) => {
-    const newSymbol = symbol === 'none' ? '' : symbol;
     setFormData((prev: any) => {
         const newFormData = { ...prev };
+        if (symbol === 'none') {
+            // "None" = KALDIR. Eskiden yalnız checkbox'ın gösterdiği adım siliniyordu,
+            // diğer adımdaki sembol ve özel-karakteristik işareti kaldığı için sembol ekranda duruyordu.
+            newFormData.classificationSymbolBefore = '';
+            newFormData.classificationSymbolAfter = '';
+            newFormData.classificationSpecialCharacteristic = false;
+            return newFormData;
+        }
         if (prev.classificationSpecialCharacteristic) {
             // Checkbox is ticked, so update Step 2 and leave Step 6 alone
-            newFormData.classificationSymbolBefore = newSymbol;
+            newFormData.classificationSymbolBefore = symbol;
         } else {
             // Checkbox is not ticked, so update Step 6
-            newFormData.classificationSymbolAfter = newSymbol;
+            newFormData.classificationSymbolAfter = symbol;
         }
         return newFormData;
     });

@@ -596,14 +596,25 @@ const App: React.FC = () => {
         next.failureCauses[causeId].classificationSymbol = sym;
         // EŞGÜDÜM: nedene sembol konunca üst fonksiyonu da özel-karakteristik yap
         // (Flow diyagramı ve Kontrol Planı fonksiyon seviyesini okur → orada da görünür).
-        if (sym) {
-            const modeId = Object.keys(next.failureModes).find(m => (next.failureModes[m].causeIds || []).includes(causeId));
-            const funcId = modeId && Object.keys(next.processStepFunctions).find(f => (next.processStepFunctions[f].failureModeIds || []).includes(modeId));
-            if (funcId) {
-                const func: any = next.processStepFunctions[funcId];
+        const modeId = Object.keys(next.failureModes).find(m => (next.failureModes[m].causeIds || []).includes(causeId));
+        const funcId = modeId && Object.keys(next.processStepFunctions).find(f => (next.processStepFunctions[f].failureModeIds || []).includes(modeId));
+        if (funcId) {
+            const func: any = next.processStepFunctions[funcId];
+            if (sym) {
                 func.classificationSpecialCharacteristic = true;
                 if (!func.classificationSymbolBefore) func.classificationSymbolBefore = sym; // mevcut sembolü ezme
                 if (!func.classificationSymbolAfter) func.classificationSymbolAfter = sym;
+            } else {
+                // "None" = KALDIR. Fonksiyon seviyesi de temizlenmeli, yoksa sembol tabloda kalmaya devam eder.
+                // Aynı fonksiyona bağlı BAŞKA bir nedende hâlâ sembol varsa dokunma.
+                const baskasindaVar = (func.failureModeIds || [])
+                    .flatMap((m: string) => next.failureModes[m]?.causeIds || [])
+                    .some((c: string) => c !== causeId && next.failureCauses[c]?.classificationSymbol);
+                if (!baskasindaVar) {
+                    func.classificationSpecialCharacteristic = false;
+                    func.classificationSymbolBefore = undefined;
+                    func.classificationSymbolAfter = undefined;
+                }
             }
         }
         return next;
