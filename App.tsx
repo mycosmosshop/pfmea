@@ -65,6 +65,24 @@ const initialActiveSymbols: FlowchartSymbolDef[] = initialAvailableSymbols.filte
     ['process', 'decision', 'data', 'terminator', 'document', 'delay'].includes(s.key)
 );
 
+// JSON'dan içe aktarılan (ya da eski sürümde kaydedilmiş) projelerde sembol KATALOĞU
+// eksik/eski gelebiliyor; o zaman Available Symbols listesi kırpık görünüyordu.
+// Standart katalog HER ZAMAN tamamlanır, projenin kendi düzenlemeleri ve özel sembolleri korunur.
+// (Standart semboller zaten silinemiyor — delete_available_symbol isStandard'ı reddediyor.)
+export const withStandardSymbols = (reg?: Partial<RegistryData> | null): RegistryData => {
+    const base = { ...initialRegistryData, ...(reg || {}) } as RegistryData;
+    const merged: FlowchartSymbolDef[] = initialAvailableSymbols.map(s => ({ ...s }));
+    (reg?.availableFlowchartSymbols || []).forEach(s => {
+        const i = merged.findIndex(x => x.key === s.key);
+        if (i >= 0) merged[i] = { ...merged[i], ...s };   // projedeki düzenleme kazanır
+        else merged.push(s);                              // projeye özel sembol korunur
+    });
+    base.availableFlowchartSymbols = merged;
+    if (!base.flowchartSymbols?.length) base.flowchartSymbols = initialActiveSymbols.map(s => ({ ...s }));
+    if (!base.classificationSymbols) base.classificationSymbols = [];
+    return base;
+};
+
 const initialRegistryData: RegistryData = {
   clientTypes: ['I','U','E'],
   processFunctionsByType: {
@@ -478,7 +496,7 @@ const App: React.FC = () => {
     if (projectToOpen) {
       setCurrentProjectId(projectToOpen.id);
       setData(projectToOpen.fmeaData);
-      setRegistryData(projectToOpen.registryData);
+      setRegistryData(withStandardSymbols(projectToOpen.registryData));
       setProjectData(projectToOpen.projectData);
       setAppView('editor');
       setLeftView('project');
@@ -1043,7 +1061,7 @@ const App: React.FC = () => {
                 
                 const wasActive = newRegistry.flowchartSymbols.some(s => s.key === payload.key);
                 if (wasActive) {
-                    newRegistry.flowchartSymbols = newRegistry.flowchartSymbols.filter(s => s.key === payload.key);
+                    newRegistry.flowchartSymbols = newRegistry.flowchartSymbols.filter(s => s.key !== payload.key);   // silinen ÇIKARILMALI (eskiden yalnız o kalıyordu)
                     setData(prevData => {
                         const newData = JSON.parse(JSON.stringify(prevData)) as FmeaData;
                         Object.values(newData.processStepFunctions).forEach(func => {
@@ -1494,6 +1512,7 @@ const App: React.FC = () => {
         const importedProject = JSON.parse(text) as FullProjectState;
 
         if (importedProject.id && importedProject.fmeaData && importedProject.projectData) {
+          importedProject.registryData = withStandardSymbols(importedProject.registryData);   // sembol kataloğunu tamamla
           await saveProject(importedProject);
           const updatedProjects = await getAllProjects();
           setProjects(updatedProjects);
