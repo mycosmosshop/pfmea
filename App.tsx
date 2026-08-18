@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction, HistoryEntry } from './types';
 import { erpdenUret, erpUrunListesi } from './utils/erpPfmea';
+import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
 import FmeaTreeView from './components/FmeaTreeView';
 import FmeaTable from './components/FmeaTable';
@@ -104,7 +105,7 @@ const initialRegistryData: RegistryData = {
   availableFlowchartSymbols: initialAvailableSymbols,
   flowchartSymbols: initialActiveSymbols,
   classificationSymbols: [],
-  responsiblePeople: ['volkan', 'Umut', 'Unal', 'Aysegul', 'Person A', 'Person B'],
+  responsiblePeople: sorumlular('Çerkezköy'),
   rpnThresholdHigh: 100,
   rpnThresholdMedium: 40,
 };
@@ -627,10 +628,19 @@ const App: React.FC = () => {
     // (önceden her kayıtta otomatik bugüne eziliyordu → elle değişiklik tutmuyordu).
     setProjectData(newProjectData);
 
+    // Lokasyon değiştiyse sorumlu listesi o lokasyona döner (Çerkezköy/Ankara);
+    // kullanıcının elle eklediği özel adlar korunur.
+    let yeniRegistry = registryData;
+    if (newProjectData.fmea.engineeringLocation !== projectData.fmea.engineeringLocation) {
+        yeniRegistry = { ...registryData,
+            responsiblePeople: listeGuncelle(registryData.responsiblePeople, newProjectData.fmea.engineeringLocation) };
+        setRegistryData(yeniRegistry);
+    }
+
     const projectState: FullProjectState = {
         id: currentProjectId,
         fmeaData: data,
-        registryData: registryData,
+        registryData: yeniRegistry,
         projectData: newProjectData,
     };
 
