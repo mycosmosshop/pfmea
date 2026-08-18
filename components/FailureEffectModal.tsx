@@ -176,7 +176,7 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
               <div className="text-xs text-gray-500">Buradaki PF’ler seçili tipe bağlıdır ve GLOBAL'dir (tüm FE’ler aynı listeyi görür).</div>
                <div className="flex flex-wrap items-center gap-2 mt-1.5 p-2 border rounded-md min-h-[38px] bg-gray-50">
                   {kaydaOzelPf && (
-                      <Pill key="__kayda_ozel" text={`${currentPfSelection}  · bu kayda özel`}
+                      <Pill key="__kayda_ozel" text={currentPfSelection}
                           onDelete={() => setLocalData(p => ({...p, selectedPFByType: {...(p.selectedPFByType||{}), [currentClientKey]: ''}}))} />
                   )}
                   {currentPfList.map(name => <Pill key={name} text={name} onDelete={() => handleDeletePf(name)} />)}
