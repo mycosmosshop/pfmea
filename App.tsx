@@ -23,6 +23,7 @@ import ProjectHistoryView from './components/ProjectHistoryView';
 import { getAllProjects, saveProject, getProject, deleteProject } from './utils/cloudDb';
 import { ProjectConfigurationView } from './components/ProjectConfigurationView';
 import { TaskManagerModal } from './components/TaskManagerModal';
+import { DenetimModal } from './components/DenetimModal';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
@@ -365,6 +366,7 @@ const App: React.FC = () => {
   const [isSodAssistantModalOpen, setIsSodAssistantModalOpen] = useState(false);
   const [isDetectionAssistantModalOpen, setIsDetectionAssistantModalOpen] = useState(false);
   const [isTaskManagerOpen, setTaskManagerOpen] = useState(false);
+  const [denetimAcik, setDenetimAcik] = useState(false);
   
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
@@ -2083,6 +2085,11 @@ const App: React.FC = () => {
               <button onClick={() => handleOpenModal({ type: 'Registry' })} className="px-4 py-1.5 text-sm font-semibold rounded-md transition-colors duration-200 text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 shadow-sm">
                   Registry
               </button>
+              <button onClick={() => setDenetimAcik(true)}
+                title="AIAG-VDA 7 adim + 4M kapsamına göre eksik değerlendirme listesi"
+                className="px-4 py-1.5 text-sm font-semibold rounded-md transition-colors duration-200 text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 shadow-sm">
+                  Denetim
+              </button>
               <button onClick={() => setIsApModalOpen(true)} className="px-4 py-1.5 text-sm font-semibold rounded-md transition-colors duration-200 text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 shadow-sm">
                   AP
               </button>
@@ -2189,6 +2196,7 @@ const App: React.FC = () => {
                 onOpenModal={handleOpenModal}
             />
         )}
+        {denetimAcik && <DenetimModal allData={data} onClose={() => setDenetimAcik(false)} />}
       </div>
       <div className="hidden print:block">
       </div>
