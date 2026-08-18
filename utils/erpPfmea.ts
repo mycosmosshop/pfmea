@@ -103,23 +103,62 @@ export function hedefTarih(planTarihi: string, ap: string): string {
   t.setDate(t.getDate() + gun);
   return t.toISOString().slice(0, 10);
 }
-export function aksiyonlar(ap: string, it: any): string[] {
-  // Emniyet karakteristiğinde AP düşük çıksa bile kontrolün sürekliliği belgelenmeli.
-  if (emniyetMi(it)) return [
-    'Yanma/mevzuat testinin periyodik tekrarı ve sertifika geçerliliğinin izlenmesi',
-    'Malzeme değişikliğinde (tedarikçi/reçete) yeniden onay — PPAP/IMDS güncellemesi',
-    ...(ap === 'L' ? [] : ['Kontrol sıklığının artırılması ve sonuçların kayıt altına alınması']),
-  ];
-  if (ap === 'H') return [
-    'Poka-yoke / otomatik kontrol devreye alınması (tespit gücünü artırır)',
-    'SPC ile izleme başlatılması (X̄-R kontrol grafiği)',
-    'DÖF açılması ve kök neden analizi (8D)',
-  ];
-  if (ap === 'M') return [
-    'Kontrol sıklığının artırılması (' + (met(it.ornekleme_sikligi) || 'mevcut sıklık') + ' → daha sık)',
-    'Operatör eğitimi (FR17) ve çalışma talimatının güncellenmesi',
-  ];
-  return ['Mevcut kontroller yeterli — periyodik gözden geçirmede teyit'];
+export interface Aksiyon { tur: 'prevention' | 'detection'; metin: string; }
+
+// Makine ayarina bagli karakteristikler (set degeri is emrinde sabitlenebilir)
+const AYAR = /AYAR|SET|ISI|SICAK|BASKI|HIZ|SURE|SÜRE|BASINC|BASIN\u00c7|DEGER|DE\u011eER/;
+
+// Aksiyonlar kontrol plani satirinin KENDI verisinden turer; jenerik "kontrol
+// sikligini artir" yerine o prosese ozgu, ispat yuku dusuk onlemler.
+export function aksiyonlar(ap: string, it: any, girdiMi = false): Aksiyon[] {
+  const k = metinS(it.olculecek) || 'karakteristik';
+  const hedef = [metinS(it.hedef_nicel), metinS(it.hedef_nitel)].filter(Boolean).join(' ')
+    || [metinS(it.alt_limit), metinS(it.ust_limit)].filter(Boolean).join('–');
+  const hd = hedef ? ` (${hedef})` : '';
+  const yontem = metinS(it.yontem);
+  const mak = metinS(it.uretim_ekipman);
+  const liste: Aksiyon[] = [];
+
+  // ÖNLEME — doğru değeri belirsizlikten çıkarır (O'yu düşürür)
+  if (girdiMi) liste.push({ tur: 'prevention',
+    metin: `Kabulde tedarikçi sertifikası/irsaliyesinde ${k} değeri${hd} teyit edilir; uygun olmayan lot bloke edilip tedarikçiye bildirilir` });
+  else if (AYAR.test(buyuk(k))) liste.push({ tur: 'prevention',
+    metin: `${k} set değeri${hd} iş emri/operasyon kartına yazılır ve vardiya başında${mak ? ` ${mak} üzerinde` : ''} operatörle teyit edilir` });
+  else if (metinS(it.ozel_kar)) liste.push({ tur: 'prevention',
+    metin: `${k} özel karakteristik olarak iş emrinde ve istasyon talimatında işaretlenir; ilk parça onayı alınmadan üretime devam edilmez` });
+  else liste.push({ tur: 'prevention',
+    metin: `${k} hedef değeri${hd} istasyondaki görsel talimatta öne çıkarılır ve vardiya başı bilgilendirmede hatırlatılır` });
+
+  // TESPİT — ölçümü kayda bağlar (D'yi düşürür)
+  if (!yontem) liste.push({ tur: 'detection',
+    metin: `${k} için ölçüm yöntemi ve numune büyüklüğü kontrol planında tanımlanır (şu an tanımlı değil)` });
+  else liste.push({ tur: 'detection',
+    metin: `İlk parça ve son parçada ${k}, ${yontem} ile ölçülüp kontrol formuna kaydedilir (${siklik(it, girdiMi)})` });
+
+  // AP yüksekse ölçümü sınır kontrolüne bağla — ek yatırım gerektirmez
+  if (ap === 'H' && yontem) liste.push({ tur: 'detection',
+    metin: `${yontem} ölçüm formuna alt/üst sınır${hd} basılır; sınır dışı değerde parça ayrılır ve ayar teyit edilmeden devam edilmez` });
+
+  // Emniyet/mevzuat: AP düşük olsa da sürekliliği belgelenmeli
+  if (emniyetMi(it)) liste.push({ tur: 'prevention',
+    metin: `${k} için laboratuvar/tedarikçi sertifikasının geçerliliği izlenir; malzeme veya reçete değişiminde yeniden test edilir` });
+
+  return liste;
+}
+
+// Aksiyon sonrası beklenen değerler. Şiddet proses aksiyonuyla DEĞİŞMEZ
+// (AIAG-VDA: S ancak ürün/tasarım değişirse düşer); önleme aksiyonu O'yu,
+// tespit aksiyonu D'yi bir kademe iyileştirir.
+// Kaynak kayitta alan bos METIN de olabiliyor; ?? bunu gecerli sayip AP yi
+// bos birakiyordu. Bos metin de "yok" sayilir.
+export function doluDeger<T>(v: any, varsayilan: T): T {
+  return v === null || v === undefined || v === '' ? varsayilan : v;
+}
+
+export function iyilestirme(S: number, O: number, D: number, aks: Aksiyon[]) {
+  const rO = aks.some(a => a.tur === 'prevention') ? Math.max(2, O - 1) : O;
+  const rD = aks.some(a => a.tur === 'detection') ? Math.max(2, D - 1) : D;
+  return { S, O: rO, D: rD, ap: apHesapla(S, rO, rD) };
 }
 
 // ── HAFIZA: mevcut PFMEA projelerinden ogrenme ───────────────────────────
@@ -327,6 +366,8 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
         hk.causes.forEach((kn: any) => {
           const cid = `c_${++nc}`;
           const ap = kn.actionPriority || apHesapla(S, Number(kn.occurrence) || O, Number(kn.detection) || D);
+          const hRev = iyilestirme(S, Number(kn.occurrence) || O, Number(kn.detection) || D,
+            (kn.actions || []).map((x: any) => ({ tur: x.type === 'detection' ? 'detection' : 'prevention', metin: '' })));
           fd.failureCauses[cid] = {
             id: cid,
             // Onceki projeden gelen aksiyon zaten yapilmis bir istir (mevcut
@@ -343,9 +384,12 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
             remarks: '',
             detection: Number(kn.detection) || D, occurrence: Number(kn.occurrence) || O,
             description: met(kn.description), actionPriority: ap,
-            revisedSeverity: null,
-            detectionControl: metinS(kn.detectionControl) || tespitKontrol(it, a.girdi), revisedDetection: null,
-            preventionControl: metinS(kn.preventionControl) || onlemeKontrol(it), revisedOccurrence: null,
+            revisedSeverity: doluDeger(kn.revisedSeverity, hRev.S),
+            detectionControl: metinS(kn.detectionControl) || tespitKontrol(it, a.girdi),
+            revisedDetection: doluDeger(kn.revisedDetection, hRev.D),
+            preventionControl: metinS(kn.preventionControl) || onlemeKontrol(it),
+            revisedOccurrence: doluDeger(kn.revisedOccurrence, hRev.O),
+            revisedActionPriority: doluDeger(kn.revisedActionPriority, hRev.ap),
             processWorkElement: met(kn.processWorkElement), workElementFunction: met(kn.workElementFunction),
           };
           fd.failureModes[mid].causeIds.push(cid);
@@ -357,18 +401,21 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
         nedenler.forEach(([aciklama, oge]) => {
           const cid = `c_${++nc}`;
           const ap = apHesapla(S, O, D);
+          const aks = aksiyonlar(ap, it, a.girdi);
+          const rev = iyilestirme(S, O, D, aks);
           fd.failureCauses[cid] = {
             id: cid,
-            actions: aksiyonlar(ap, it).map((d, i) => ({
-              id: `${cid}_a${i + 1}`, type: i === 0 ? 'prevention' : 'detection', number: i + 1,
-              status: 'Open', actionTaken: '', description: d,
+            actions: aks.map((x, i) => ({
+              id: `${cid}_a${i + 1}`, type: x.tur, number: i + 1,
+              status: 'Open', actionTaken: '', description: x.metin,
               completionDate: '', responsiblePerson: '',
               targetCompletionDate: hedefTarih(planTarihi, ap),
             })),
             remarks: '',
             detection: D, occurrence: O, description: aciklama, actionPriority: ap,
-            revisedSeverity: null, detectionControl: tespitKontrol(it, a.girdi), revisedDetection: null,
-            preventionControl: onlemeKontrol(it), revisedOccurrence: null,
+            revisedSeverity: rev.S, detectionControl: tespitKontrol(it, a.girdi), revisedDetection: rev.D,
+            preventionControl: onlemeKontrol(it), revisedOccurrence: rev.O,
+            revisedActionPriority: rev.ap,
             processWorkElement: oge, workElementFunction: '',
           };
           fd.failureModes[mid].causeIds.push(cid);

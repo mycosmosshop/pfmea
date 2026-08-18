@@ -55,9 +55,9 @@ assert.strictEqual(K.onlemeKontrol({ proses_kontrol: 'Parametre takibi' }), 'Par
 assert.ok(K.onlemeKontrol({}).includes('FR17'));
 assert.strictEqual(K.tespitKontrol({ yontem: 'Kumpas', ornekleme_buyuklugu: 5, ornekleme_sikligi: 'Her lot' }),
   'Kumpas · 5 adet · Her lot');
-assert.ok(K.aksiyonlar('L', { olculecek: 'Yanma hızı' }).join(' ').includes('sertifika'),
+const metinler = (...a) => K.aksiyonlar(...a).map(x => x.metin).join(' | ');
+assert.ok(metinler('L', { olculecek: 'Yanma hızı' }).includes('sertifika'),
   'emniyette AP düşük olsa da süreklilik aksiyonu');
-assert.ok(K.aksiyonlar('H', {}).join(' ').includes('Poka-yoke'));
 
 // ── İskelet ──
 const fd = K.iskeletUret(
@@ -356,6 +356,88 @@ const dz2 = await K.agacDuz('203.0.K', okuBir, async (yol, kod) => { cagri.push(
 assert.deepStrictEqual(cagri, [['refreshbom', '203.0.K']],
   'eksik agac icin BIR kez LeanSys cagrilmali; hammadde yapraklari icin cagrilmamali');
 assert.ok(dz2.length > 0, 'cekildikten sonra agac okunmali');
+
+
+// ── Aksiyonlar prosese ÖZGÜ olmalı, jenerik olmamalı ──
+// Eskiden AP'ye bakıp "Kontrol sıklığının artırılması (60 → daha sık)" gibi
+// her satıra aynı metni yazıyordu.
+const HEPSI = [
+  ['L', { olculecek: 'Kesim ölçüsü', yontem: 'Kumpas' }, false],
+  ['M', { olculecek: 'MAKINE ISI AYARI', hedef_nicel: 80, hedef_nitel: 'C', uretim_ekipman: 'LMM' }, false],
+  ['H', { olculecek: 'Gramaj', yontem: 'Terazi', ozel_kar: 'X' }, false],
+  ['L', { olculecek: 'Kalınlık', yontem: 'Mikrometre' }, true],
+].map(([ap, it, g]) => metinler(ap, it, g)).join(' ');
+assert.ok(!/sıklığın artırılması|Poka-yoke|periyodik gözden geçirmede teyit|8D/.test(HEPSI),
+  'jenerik aksiyon metinleri kalmamalı');
+
+// Girdi: tedarikçi tarafına bakan aksiyon
+assert.ok(metinler('L', { olculecek: 'Kalınlık', yontem: 'Mikrometre' }, true).includes('tedarikçi'),
+  'girdide kabul/tedarikçi aksiyonu');
+
+// Makine ayarı: set değeri iş emrine + makine adı
+const ayar = metinler('M', { olculecek: 'MAKINE ISI AYARI', hedef_nicel: 80, hedef_nitel: 'C', uretim_ekipman: 'LMM LAMINASYON' });
+assert.ok(ayar.includes('set değeri') && ayar.includes('(80 C)') && ayar.includes('LMM LAMINASYON'),
+  'ayar karakteristiğinde set değeri, hedef ve makine yazmalı');
+
+// Özel karakteristik: ilk parça onayı
+assert.ok(metinler('L', { olculecek: 'Gramaj', yontem: 'Terazi', ozel_kar: 'X' }).includes('ilk parça onayı'),
+  'özel karakteristikte ilk parça onayı');
+
+// Ölçüm yöntemi tanımsızsa önce onu tanımlat
+const yontemsiz = K.aksiyonlar('L', { olculecek: 'Etiket' });
+assert.ok(yontemsiz.some(x => x.tur === 'detection' && x.metin.includes('kontrol planında tanımlanır')),
+  'yöntem yoksa tespit aksiyonu yöntemi tanımlatmalı');
+assert.ok(!K.aksiyonlar('H', { olculecek: 'Etiket' }).some(x => x.metin.includes('alt/üst sınır')),
+  'yöntem yokken sınır aksiyonu önerilmemeli');
+
+// AP=H: ölçüm formuna sınır — ek yatırım istemeyen tespit
+assert.ok(metinler('H', { olculecek: 'Boy', yontem: 'Şeritmetre', hedef_nicel: 150, hedef_nitel: 'mm' })
+  .includes('alt/üst sınır'), 'AP yüksekte sınır kontrolü');
+
+// Her satırda en az bir önleme ve bir tespit aksiyonu olmalı
+[['L', {}], ['M', { yontem: 'Kumpas' }], ['H', { yontem: 'Kumpas' }]].forEach(([ap, it]) => {
+  const a = K.aksiyonlar(ap, it);
+  assert.ok(a.some(x => x.tur === 'prevention') && a.some(x => x.tur === 'detection'),
+    `AP=${ap} için hem önleme hem tespit aksiyonu`);
+});
+
+// ── Optimizasyon (Adım 6): revize S/O/D ve AP ──
+const iy = K.iyilestirme(8, 5, 7, [{ tur: 'prevention' }, { tur: 'detection' }]);
+assert.strictEqual(iy.S, 8, 'şiddet proses aksiyonuyla düşmez');
+assert.strictEqual(iy.O, 4);
+assert.strictEqual(iy.D, 6);
+assert.strictEqual(iy.ap, K.apHesapla(8, 4, 6));
+assert.strictEqual(K.iyilestirme(8, 5, 7, [{ tur: 'detection' }]).O, 5, 'önleme yoksa O düşmez');
+assert.strictEqual(K.iyilestirme(8, 5, 7, [{ tur: 'prevention' }]).D, 7, 'tespit yoksa D düşmez');
+assert.strictEqual(K.iyilestirme(8, 2, 2, [{ tur: 'prevention' }, { tur: 'detection' }]).O, 2,
+  'tek kademe iyileştirme 2 nin altına inmemeli');
+
+const fdRev = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [{ op_no: 1, olculecek: 'Kesim ölçüsü', yontem: 'Kumpas', proses_kontrol: 'Talimat' }], {}, 'kontrol planı');
+const rc = Object.values(fdRev.failureCauses)[0];
+assert.strictEqual(rc.revisedSeverity, 5);
+assert.strictEqual(rc.revisedOccurrence, rc.occurrence - 1);
+assert.strictEqual(rc.revisedDetection, rc.detection - 1);
+assert.strictEqual(rc.revisedActionPriority, K.apHesapla(5, rc.revisedOccurrence, rc.revisedDetection));
+
+
+// Kaynak kayitta revize alani BOS METIN olabiliyor; gecerli sayilmamali
+assert.strictEqual(K.doluDeger('', 7), 7);
+assert.strictEqual(K.doluDeger(null, 7), 7);
+assert.strictEqual(K.doluDeger(undefined, 7), 7);
+assert.strictEqual(K.doluDeger(0, 7), 0, '0 gecerli bir degerdir');
+assert.strictEqual(K.doluDeger(3, 7), 3);
+
+const hafizaBos = { 'gramaj': { kaynak: 'P', mode: 'm', effectText: 'e', severity: 6, causes: [{
+  description: 'n', occurrence: 4, detection: 5, actionPriority: 'M',
+  revisedSeverity: '', revisedOccurrence: '', revisedDetection: '', revisedActionPriority: '',
+  actions: [{ type: 'prevention', description: 'x' }, { type: 'detection', description: 'y' }] }] } };
+const fdB = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [planSatir(1, 'Gramaj')], {}, 'kontrol plani', hafizaBos, '2026-03-10');
+const bc = Object.values(fdB.failureCauses)[0];
+assert.strictEqual(bc.revisedOccurrence, 3, 'bos kaynak degeri yerine hesaplanan kullanilmali');
+assert.strictEqual(bc.revisedDetection, 4);
+assert.ok(bc.revisedActionPriority, 'revize AP bos kalmamali');
 
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');
