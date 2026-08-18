@@ -491,9 +491,10 @@ const App: React.FC = () => {
   const [erpKod, setErpKod] = React.useState('');
   const [erpDurum, setErpDurum] = React.useState('');
   const [erpMesgul, setErpMesgul] = React.useState(false);
+  const [menuAcik, setMenuAcik] = React.useState(false);
 
   const erpAc = async () => {
-    setErpAcik(true); setErpDurum('Ürün listesi okunuyor…');
+    setMenuAcik(false); setErpAcik(true); setErpDurum('Ürün listesi okunuyor…');
     try { setErpListe(await erpUrunListesi()); setErpDurum(''); }
     catch (e:any) { setErpDurum('Ürün listesi okunamadı: ' + (e?.message || e)); }
   };
@@ -505,11 +506,33 @@ const App: React.FC = () => {
       const s = await erpdenUret(kod);
       const yeni = createNewProjectState();
       yeni.fmeaData = s.fmeaData;
+      // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
+      // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
+      const bugun = new Date().toISOString().slice(0, 10);
+      const tarih = s.planTarihi || bugun;
+      const pd: any = yeni.projectData;
       yeni.projectData = {
-        ...yeni.projectData,
-        fmea: { ...(yeni.projectData as any).fmea, project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})` },
-        cp: { ...((yeni.projectData as any).cp || {}),
-              notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
+        ...pd,
+        fmea: { ...pd.fmea,
+          project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})`,
+          firstFmeaDate: tarih, lastRevisionDate: tarih,
+          fmeaNumberVersion: s.planRev || pd.fmea.fmeaNumberVersion,
+        },
+        cp: { ...(pd.cp || {}),
+          controlPlanNumber: s.planKod || (pd.cp || {}).controlPlanNumber,
+          dateOrig: tarih, dateRev: tarih,
+          partNameDescription: s.urunAdi, partNumberChangeLevel: kod,
+          notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
+        pf: { ...(pd.pf || {}), processName: s.urunAdi, partDescription: kod,
+          dateOrig: tarih, dateRev: tarih, revisionLevel: s.planRev || '' },
+        history: [
+          ...((pd.history as any[]) || []),
+          { id: `h_${Date.now()}`, revision: s.planRev || '0', date: tarih,
+            changeDescription: `ERP'den otomatik üretildi — ${s.ozet.adim} proses adımı, ${s.ozet.karakteristik} karakteristik`
+              + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} neden benzer projelerden uyarlandı` : ''),
+            changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`,
+            preparedBy: '', approvedBy: '' },
+        ],
       } as any;
       await saveProject(yeni);
       setErpMesgul(false); setErpAcik(false);
@@ -521,8 +544,11 @@ const App: React.FC = () => {
       setLeftView('project');
       alert(`PFMEA üretildi\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
-        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}`
-        + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : ''));
+        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
+        + `Benzer projelerden uyarlanan neden: ${s.ozet.uyarlanan}\n`
+        + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)' : ' (planda tarih yok — bugün)'}`
+        + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : '')
+        + (s.ozet.opKartiYok ? `\n\nUYARI: Operasyon kartı ERP'de yok (LeanSys'ten de gelmedi) — proses adımları kontrol planındaki op numaralarından kuruldu; makine adlarını kontrol edin.` : ''));
     } catch (e:any) {
       setErpMesgul(false); setErpDurum('Hata: ' + (e?.message || e));
     }
@@ -1832,13 +1858,29 @@ const App: React.FC = () => {
                 <button onClick={handleNewProject} className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-blue-600 hover:bg-blue-700 shadow-md">
                   New Project
                 </button>
-                <button
-                  onClick={erpAc}
-                  title="Ürün ağacı + operasyon kartı + kontrol planından PFMEA üretir"
-                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-amber-600 hover:bg-amber-700 shadow-md"
-                >
-                  ERP'den Üret
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setMenuAcik(v => !v)}
+                    onBlur={() => setTimeout(() => setMenuAcik(false), 150)}
+                    title="Diğer oluşturma seçenekleri"
+                    className="px-3 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-gray-600 hover:bg-gray-700 shadow-md"
+                  >
+                    ▾
+                  </button>
+                  {menuAcik && (
+                    <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 text-left">
+                      <button
+                        onMouseDown={erpAc}
+                        className="block w-full text-left px-4 py-3 text-sm hover:bg-amber-50"
+                      >
+                        <span className="font-semibold text-amber-700">ERP'den Üret</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          Ürün ağacı + operasyon kartı + kontrol planından PFMEA iskeleti
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button 
                   onClick={handleImportClick}
                   className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-indigo-600 hover:bg-indigo-700 shadow-md"
