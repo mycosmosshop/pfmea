@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { FmeaData, FmeaAction, FailureCause, ModalType } from '../types';
-import { durumDegistir } from '../utils/gorev';
+import { durumDegistir, hepsiniDegistir } from '../utils/gorev';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
@@ -212,7 +212,12 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                         <table className="min-w-full">
                             <thead className="sticky top-0">
                                 <tr>
-                                    <th className={thClass} title="Tamamlandı işaretle">✔</th>
+                                    <th className={thClass} title={isManagementMode ? 'Tümünü tamamla / geri al' : 'Bu ekranda düzenlenemez'}>
+                                        <input type="checkbox" disabled={!isManagementMode}
+                                            checked={allActions.length > 0 && allActions.every(isCompleted)}
+                                            onChange={e => onDataUpdate && onDataUpdate(
+                                                hepsiniDegistir(allData, e.target.checked, new Date().toISOString().slice(0, 10)))} />
+                                    </th>
                                     <th className={thClass}>Action type</th>
                                     <th className={thClass}>Recommended Actions</th>
                                     <th className={thClass}>Name</th>

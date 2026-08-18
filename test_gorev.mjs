@@ -7,7 +7,7 @@ const cikti = buildSync({
   entryPoints: ['utils/gorev.ts'],
   bundle: true, write: false, format: 'esm', platform: 'neutral', target: 'es2020',
 }).outputFiles[0].text;
-const { durumDegistir } = await import('data:text/javascript;base64,' + Buffer.from(cikti).toString('base64'));
+const { durumDegistir, hepsiniDegistir } = await import('data:text/javascript;base64,' + Buffer.from(cikti).toString('base64'));
 
 const veri = () => ({
   failureCauses: {
@@ -43,5 +43,22 @@ assert.strictEqual(v3.failureCauses.c2.actions[0].completionDate, '2026-01-05');
 
 // Bilinmeyen görev: hiçbir şey değişmemeli
 assert.deepStrictEqual(durumDegistir(veri(), 'yok', true, '2026-08-19'), veri());
+
+
+// -- Tumunu tamamla / geri al --
+const t1 = hepsiniDegistir(veri(), true, '2026-08-19');
+const hepsi = (d) => Object.values(d.failureCauses).flatMap(c => c.actions || []);
+assert.ok(hepsi(t1).every(a => a.status === 'Completed'), 'tumu tamamlanmali');
+assert.strictEqual(hepsi(t1).find(a => a.id === 'a1').completionDate, '2026-08-19');
+assert.strictEqual(hepsi(t1).find(a => a.id === 'a3').completionDate, '2026-01-05',
+  'var olan tamamlanma tarihi korunmali');
+
+const t2 = hepsiniDegistir(veri(), false, '2026-08-19');
+assert.ok(hepsi(t2).every(a => a.status === 'Open' && a.completionDate === ''),
+  'geri alinca tumu acik ve tarihsiz olmali');
+
+const asil2 = veri();
+hepsiniDegistir(asil2, true, '2026-08-19');
+assert.ok(hepsi(asil2).every(a => a.status !== 'Completed' || a.id === 'a3'), 'girdi bozulmamali');
 
 console.log('OK görev durumu: işaretleme, geri alma, tarih kuralları, kopya güvenliği.');
