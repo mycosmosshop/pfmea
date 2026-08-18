@@ -11,7 +11,7 @@
 // izlenebilsin diye. Hata türleri/etkiler iskelet olarak açılır; ekip doldurur.
 
 import { initialApMatrix } from './ap-matrix';
-import { sorumlular } from './sorumlular';
+import { sorumlular, atamaHavuzu, atananSorumlu } from './sorumlular';
 
 const SUPABASE_URL = 'https://nnubrxbpthmkitueixbh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5udWJyeGJwdGhta2l0dWVpeGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NjI2MDIsImV4cCI6MjA5NjEzODYwMn0.CHZUOylf_q8kkOQbFf9VWZ6-doUTlynmAhahM2EuImE';
@@ -275,10 +275,11 @@ export function girdiSatirlari(kod: string, planlar: any[]): any[] {
   return g.length ? g : (girdiMalzemeMi(kod) ? planlar : []);
 }
 
-export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '', sorumluListe: string[] = []) {
-  // Lokasyon disi sorumlu tasinmaz: kaynak projedeki ad bu lokasyonun
-  // listesinde yoksa bos birakilir (Ankara'daki ad Cerkezkoy'e gelmesin).
-  const sorumluSuz = (ad: string) => (sorumluListe.includes(ad) ? ad : '');
+export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '', sorumluListe: string[] = [], havuz: string[] = []) {
+  // Kaynak projedeki sorumlu ancak ATAMA HAVUZUNDA ise korunur: lokasyon disi
+  // adlar (Ankara -> Cerkezkoy) ve aksiyon sahibi atanmayan kisiler elenir.
+  const sorumluSuz = (ad: string) =>
+    ((havuz.length ? havuz : sorumluListe).includes(ad) ? ad : '');
   const tamamTarihi = planTarihi || new Date().toISOString().slice(0, 10);
   const fd: any = { failureModes: {}, processItems: {}, processSteps: {}, failureCauses: {}, failureEffects: {}, processItemIds: [], processStepFunctions: {} };
   let ns = 0, nf = 0, nm = 0, nc = 0, ne = 0;
@@ -394,7 +395,7 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
               status: met(ak.status) || 'Open', actionTaken: met(ak.actionTaken),
               description: met(ak.description),
               completionDate: met(ak.completionDate),
-              responsiblePerson: sorumluSuz(met(ak.responsiblePerson)),
+              responsiblePerson: sorumluSuz(met(ak.responsiblePerson)) || atananSorumlu(havuz, nc),
               targetCompletionDate: met(ak.targetCompletionDate) || hedefTarih(planTarihi, ap),
             })),
             remarks: '',
@@ -428,7 +429,7 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
               status: x.acik ? 'Open' : 'Completed',
               actionTaken: x.acik ? '' : 'Mevcut uygulama — kontrol planında tanımlı',
               description: x.metin,
-              completionDate: x.acik ? '' : tamamTarihi, responsiblePerson: '',
+              completionDate: x.acik ? '' : tamamTarihi, responsiblePerson: atananSorumlu(havuz, nc),
               targetCompletionDate: x.acik ? hedefTarih(planTarihi, ap) : tamamTarihi,
             })),
             remarks: '',
@@ -564,7 +565,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   // Mevcut projelerden ogren (hata turu, etki, siddet, nedenler, aksiyonlar)
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
-  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi, sorumlular('Çerkezköy'));
+  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi, sorumlular('Çerkezköy'), atamaHavuzu('Çerkezköy'));
   // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
   const uyarlanan = Object.values<any>(fd.processStepFunctions)
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;

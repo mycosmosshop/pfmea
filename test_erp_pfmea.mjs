@@ -501,5 +501,22 @@ assert.strictEqual(Object.keys(K.hafizaKur([projeIle({ actions: [{ description:
 assert.strictEqual(Object.keys(K.hafizaKur([projeIle({})])).length, 1,
   'insan yazimi neden hafizaya girmeli');
 
+
+// -- Uretilen aksiyonlar sorumlusuz kalmamali --
+const fdAta = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [planSatir(1, 'Boy'), planSatir(2, 'En')], {}, 'kontrol plani', {}, '2026-03-10',
+  ['Ayse', 'Mehmet'], ['Ayse', 'Mehmet']);
+const ataAks = Object.values(fdAta.failureCauses).flatMap(c => c.actions);
+assert.ok(ataAks.length > 0);
+assert.strictEqual(ataAks.filter(a => !a.responsiblePerson).length, 0,
+  'uretilen her aksiyona sorumlu atanmali');
+assert.ok(ataAks.every(a => ['Ayse', 'Mehmet'].includes(a.responsiblePerson)),
+  'sorumlu havuzdan gelmeli');
+// Ayni nedenin tum aksiyonlari ayni kisiye
+Object.values(fdAta.failureCauses).forEach(c => {
+  const kisiler = new Set(c.actions.map(a => a.responsiblePerson));
+  assert.strictEqual(kisiler.size, 1, 'bir nedenin isleri tek sahipte olmali');
+});
+
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');
