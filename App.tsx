@@ -1858,6 +1858,25 @@ const App: React.FC = () => {
                 <button onClick={handleNewProject} className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-blue-600 hover:bg-blue-700 shadow-md">
                   New Project
                 </button>
+                <button 
+                  onClick={handleImportClick}
+                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-indigo-600 hover:bg-indigo-700 shadow-md"
+                >
+                  Import Project
+                </button>
+                 <button
+                    onClick={handleExportDashboardToExcel}
+                    className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-teal-600 hover:bg-teal-700 shadow-md"
+                >
+                    Export to Excel
+                </button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+                <button 
+                  onClick={handleOpenEditor} 
+                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-green-600 hover:bg-green-700 shadow-md"
+                >
+                  FMEA Editor
+                </button>
                 <div className="relative">
                   <button
                     onClick={() => setMenuAcik(v => !v)}
@@ -1881,25 +1900,6 @@ const App: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <button 
-                  onClick={handleImportClick}
-                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-indigo-600 hover:bg-indigo-700 shadow-md"
-                >
-                  Import Project
-                </button>
-                 <button
-                    onClick={handleExportDashboardToExcel}
-                    className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-teal-600 hover:bg-teal-700 shadow-md"
-                >
-                    Export to Excel
-                </button>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
-                <button 
-                  onClick={handleOpenEditor} 
-                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-green-600 hover:bg-green-700 shadow-md"
-                >
-                  FMEA Editor
-                </button>
             </div>
         </header>
         <div className="mb-4">
