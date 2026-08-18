@@ -119,24 +119,57 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
         }
     };
 
-    const handleExportExcel = () => {
-        const dataToExport = allActions.map(action => ({
-            'Action type': action.type === 'prevention' ? 'Prevention Action' : 'Detection Action',
-            'Recommended Actions': action.description,
-            'Name': action.responsiblePerson,
-            'Position': '', // No data for this
-            'Department': '', // No data for this
-            'Target Completion Date': action.targetCompletionDate,
-            'Status': action.status,
-            'Completion Date': action.completionDate,
-            'Action Taken': action.actionTaken,
-            'Number': action.number ?? '',
-        }));
+    // Gorevin kaynagi: adim > karakteristik > neden (Excel'de takip icin)
+    const kaynakYolu = (actionId: string): string => {
+        const ctx = actionContext[actionId];
+        if (!ctx) return '';
+        const fn: any = ctx.funcId ? allData.processStepFunctions[ctx.funcId] : null;
+        const step: any = fn ? Object.values<any>(allData.processSteps).find(st => (st.functionIds || []).includes(fn.id)) : null;
+        return [step?.name, fn?.productCharacteristic, ctx.cause?.description].filter(Boolean).join(' › ');
+    };
 
-        const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const handleExportExcel = () => {
+        // xlsx-js-style yuklu (index.html) - hucre stilleri destekleniyor
+        const kenar = { style: 'thin', color: { rgb: 'B0B0B0' } };
+        const kenarlar = { top: kenar, bottom: kenar, left: kenar, right: kenar };
+        const antet = (v: string) => ({ v, t: 's', s: {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '1F4E9C' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: kenarlar,
+        } });
+        const hucre = (v: any, tamam: boolean, ortala = false) => ({ v: v ?? '', t: 's', s: {
+            font: tamam ? { strike: true, color: { rgb: '2E7D32' } } : {},
+            fill: tamam ? { fgColor: { rgb: 'E8F5E9' } } : undefined,
+            alignment: { vertical: 'top', wrapText: true, ...(ortala ? { horizontal: 'center' } : {}) },
+            border: kenarlar,
+        } });
+
+        const basliklar = ['No', 'Action Type', 'Recommended Actions', 'Kaynak (adım › karakteristik › neden)',
+            'Responsible', 'Target Date', 'Status', 'Completion Date', 'Action Taken'];
+        const aoa: any[][] = [basliklar.map(antet)];
+        allActions.forEach((a, i) => {
+            const tamam = isCompleted(a);
+            aoa.push([
+                hucre(String(i + 1), tamam, true),
+                hucre(a.type === 'prevention' ? 'Prevention' : 'Detection', tamam, true),
+                hucre(a.description, tamam),
+                hucre(kaynakYolu(a.id), tamam),
+                hucre(a.responsiblePerson, tamam),
+                hucre(a.targetCompletionDate, tamam, true),
+                hucre(a.status, tamam, true),
+                hucre(a.completionDate, tamam, true),
+                hucre(a.actionTaken, tamam),
+            ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [{wch:5},{wch:11},{wch:55},{wch:45},{wch:18},{wch:12},{wch:11},{wch:12},{wch:35}];
+        ws['!rows'] = [{ hpt: 28 }];
+        ws['!autofilter'] = { ref: `A1:I${allActions.length + 1}` };
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Tasks");
-        XLSX.writeFile(wb, "TaskManager_Export.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+        XLSX.writeFile(wb, 'TaskManager_Export.xlsx');
     };
 
     const handleExportPdf = () => {
