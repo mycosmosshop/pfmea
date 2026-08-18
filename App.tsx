@@ -507,16 +507,6 @@ const App: React.FC = () => {
       const yeni: any = createNewProjectState();
       yeni.fmeaData = s.fmeaData;
       yeni.otomatik = true;   // hafiza bu projeden ogrenmesin (kendi ciktisi)
-      // Uretilen PF adlari kayit defterine eklenir; etkinin PF acilir listesi
-      // bos gelmesin diye.
-      const pfVar: string[] = yeni.registryData.processFunctionsByType?.['E'] || [];
-      yeni.registryData = {
-        ...yeni.registryData,
-        processFunctionsByType: {
-          ...(yeni.registryData.processFunctionsByType || {}),
-          E: [...new Set([...pfVar, ...s.pfListesi])],
-        },
-      };
       // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
       // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
       const bugun = new Date().toISOString().slice(0, 10);

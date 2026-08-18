@@ -43,6 +43,11 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
   const currentClientKey = localData.clientType || '';
   const currentPfList = registryData.processFunctionsByType?.[currentClientKey] || [];
   const currentPfSelection = localData.selectedPFByType?.[currentClientKey] || '';
+  // Kaydin kendi PF degeri global listede olmayabilir (ERP uretimi her
+  // karakteristige kendi PF sini yazar). Global liste sismesin diye oraya
+  // eklenmez; yalnizca bu kaydin secenegi listeye katilir.
+  const pfSecenekleri = currentPfSelection && !currentPfList.includes(currentPfSelection)
+    ? [currentPfSelection, ...currentPfList] : currentPfList;
 
   const handleAddClientType = () => {
     const trimmedName = newClientTypeName.trim().toUpperCase();
@@ -157,7 +162,7 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
               <div className="flex gap-2 items-center">
                   <select value={currentPfSelection} onChange={e => setLocalData(p => ({...p, selectedPFByType: {...(p.selectedPFByType||{}), [currentClientKey]: e.target.value}}))} className="flex-1 p-2 border border-gray-300 rounded-md bg-white" disabled={!currentClientKey}>
                       <option value="">Seçiniz…</option>
-                      {currentPfList.map(name => <option key={name} value={name}>{name}</option>)}
+                      {pfSecenekleri.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
                   <input 
                     value={newPfName} 

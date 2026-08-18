@@ -206,16 +206,24 @@ export function hafizadaAra(hafiza: Hafiza, karakteristik: string): HafizaKayit 
 
 export interface UretimSonuc {
   fmeaData: any;
-  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean };
+  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean; agacKalem: number };
   urunAdi: string;
   planNo: string;
   planTarihi: string;
   planKod: string;
   planRev: string;
-  pfListesi: string[];
 }
 
 // ── İskelet üretici (saf: test edilebilir) ────────────────────────────────
+// Bir kalemin GIRDI kontrol satirlari. LeanSys'te girdi kontrolunu `giris`
+// bayragi isaretler; bayrak varsa o satirlar esastir. Bayrak hic kullanilmamis
+// eski planlarda, kod kurali hammadde diyorsa planin tamami girdi sayilir -
+// yari mamulun kendi proses plani yanlislikla girdi adimina donmesin diye.
+export function girdiSatirlari(kod: string, planlar: any[]): any[] {
+  const g = planlar.filter(x => !!Number(x.giris));
+  return g.length ? g : (girdiMalzemeMi(kod) ? planlar : []);
+}
+
 export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '') {
   const fd: any = { failureModes: {}, processItems: {}, processSteps: {}, failureCauses: {}, failureEffects: {}, processItemIds: [], processStepFunctions: {} };
   let ns = 0, nf = 0, nm = 0, nc = 0, ne = 0;
@@ -226,15 +234,8 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
 
   const adimlar: any[] = [];
 
-  // Girdi adimi YALNIZ gercekten girdi kontrolu olan malzeme icin acilir.
-  // LeanSys'te bunu `giris` bayragi isaretler; bayrak hic kullanilmamis eski
-  // planlarda malzemenin kendi planinin tamami girdi kontrolu sayilir.
-  const girdiSatir = (k: string) => {
-    const t = bomPlan[k] || [];
-    const g = t.filter(x => !!Number(x.giris));
-    return g.length ? g : t;
-  };
-  bom.filter(b => girdiMalzemeMi(b.tuketim_kodu) && girdiSatir(met(b.tuketim_kodu)).length)
+  const girdiSatir = (k: string) => girdiSatirlari(k, bomPlan[k] || []);
+  bom.filter(b => girdiSatir(met(b.tuketim_kodu)).length)
     .forEach(b => adimlar.push({
       girdi: true, op: 0, kod: met(b.tuketim_kodu),
       ad: `Girdi Kalite Kontrol – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
@@ -390,6 +391,63 @@ async function ajanTazele(yol: string, kod: string): Promise<void> {
   } catch { /* ajan yok - eldeki veriyle devam */ }
 }
 
+// Urun agacini seviye seviye tarar. Bir seviyede agaci ERP'de bulunmayan
+// kalemler icin LeanSys'ten bir kez cekilir, sonra o seviye yeniden okunur.
+export async function agacDuz(kok: string, oku: (k: string[]) => Promise<any[]> = agacOku,
+                             tazele: (y: string, k: string) => Promise<void> = ajanTazele): Promise<any[]> {
+  const gorulen = new Set<string>([met(kok)]);
+  const sonuc: any[] = [];
+  let seviye = [met(kok)];
+  for (let derinlik = 0; derinlik < 8 && seviye.length; derinlik++) {
+    let satir = await oku(seviye);
+    // Hammaddenin agaci zaten olmaz; yalniz yari mamul/mamul icin cekilir
+    // (yoksa her yaprak icin ayri ayri LeanSys cagrisi yapiliyordu).
+    const bosalanlar = seviye.filter(k => !girdiMalzemeMi(k) && !satir.some(b => met(b.urun_kodu) === k));
+    if (bosalanlar.length) {                      // agaci ERP'de yok - LeanSys'ten cek
+      await tazele('refreshbom', bosalanlar.join(','));
+      satir = await oku(seviye);
+    }
+    const sonraki: string[] = [];
+    satir.filter(b => b.varsayilan !== false).forEach(b => {
+      const k = met(b.tuketim_kodu);
+      if (!k || gorulen.has(k)) return;           // dongu ve tekrar korumasi
+      gorulen.add(k); sonuc.push(b); sonraki.push(k);
+    });
+    seviye = sonraki;
+  }
+  return sonuc;
+}
+
+async function agacOku(kodlar: string[]): Promise<any[]> {
+  const cikti: any[] = [];
+  for (let i = 0; i < kodlar.length; i += 40) {
+    const liste = kodlar.slice(i, i + 40).map(c => `"${c}"`).join(',');
+    cikti.push(...await sorgu(`urun_agaclari?select=urun_kodu,tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=in.(${encodeURIComponent(liste)})`));
+  }
+  return cikti;
+}
+
+// Verilen kodlarin kontrol planlari; ERP'de olmayanlar LeanSys'ten cekilir.
+async function planlariOku(kodlar: string[]): Promise<Record<string, any[]>> {
+  const oku = async (liste: string[]) => {
+    const cikti: any[] = [];
+    for (let i = 0; i < liste.length; i += 40) {
+      const g = liste.slice(i, i + 40).map(c => `"${c}"`).join(',');
+      cikti.push(...await sorgu(`leansys_kontrol_plani?select=*&stok_kodu=in.(${encodeURIComponent(g)})`));
+    }
+    return cikti;
+  };
+  let satir = await oku(kodlar);
+  const eksik = kodlar.filter(k => !satir.some(x => met(x.stok_kodu) === k));
+  if (eksik.length) {                             // plani ERP'de yok - LeanSys'ten cek
+    await ajanTazele('refreshplan', eksik.join(','));
+    satir = await oku(kodlar);
+  }
+  const m: Record<string, any[]> = {};
+  satir.forEach(x => (m[met(x.stok_kodu)] = m[met(x.stok_kodu)] || []).push(x));
+  return m;
+}
+
 export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   const kod = encodeURIComponent(stokKodu);
   let [bomHam, rotaHam, planHam] = await Promise.all([
@@ -413,22 +471,20 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   }
   if (!rotaHam.length && !planHam.length) throw new Error('Bu ürün için operasyon kartı ve kontrol planı bulunamadı (LeanSys’ten de gelmedi).');
 
-  const bomTum = bomHam.filter(b => b.varsayilan !== false);
-  const bom = bomTum.filter(b => girdiMalzemeMi(b.tuketim_kodu));
+  // Agacin TUM seviyeleri (yari mamullerin altindaki hammaddeler dahil)
+  const bomTum = await agacDuz(stokKodu);
   const rotaHid = (rotaHam.find(r => r.varsayilan === true) || rotaHam[0] || {}).header_id;
   const rota = rotaHam.filter(r => r.header_id === rotaHid);
 
-  // Her girdi hammaddesinin KENDİ girdi kontrol planı
-  const bomPlan: Record<string, any[]> = {};
-  if (bom.length) {
-    const kodlar = bom.map(b => b.tuketim_kodu).filter(Boolean);
-    for (let i = 0; i < kodlar.length; i += 40) {
-      const liste = kodlar.slice(i, i + 40).map((c: string) => `"${c}"`).join(',');
-      const d = await sorgu(`leansys_kontrol_plani?select=*&stok_kodu=in.(${encodeURIComponent(liste)})`);
-      d.forEach(x => (bomPlan[x.stok_kodu] = bomPlan[x.stok_kodu] || []).push(x));
-    }
-  }
-  const planiOlmayan = bom.filter(b => !(bomPlan[b.tuketim_kodu] || []).length).length;
+  // Agactaki her kalemin KENDI kontrol plani (eksikse LeanSys'ten cekilir)
+  const bomPlan = bomTum.length
+    ? await planlariOku([...new Set(bomTum.map(b => met(b.tuketim_kodu)).filter(Boolean))])
+    : {};
+  // Girdi kontrolu olan kalemler FMEA'ya girer (kural: girdiSatirlari)
+  const bom = bomTum.filter(b => girdiSatirlari(met(b.tuketim_kodu), bomPlan[met(b.tuketim_kodu)] || []).length);
+  // Kod kurali hammadde diyor ama hicbir plani yok - uyarilmali
+  const planiOlmayan = bomTum.filter(b => girdiMalzemeMi(b.tuketim_kodu)
+    && !(bomPlan[met(b.tuketim_kodu)] || []).length).length;
   const opKartiYok = !rotaHam.length;
 
   const ilk = planHam[0] || {};
@@ -442,15 +498,12 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
   const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi);
-  // Uretilen PF adlari kayit defterine eklenecek (acilir listede gorunsun)
-  const pfListesi = [...new Set(Object.values<any>(fd.failureEffects)
-    .map(e => e.selectedPFByType?.E).filter(Boolean))] as string[];
   // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
   const uyarlanan = Object.values<any>(fd.processStepFunctions)
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;
 
   return {
-    fmeaData: fd, urunAdi, planNo, planTarihi, pfListesi,
+    fmeaData: fd, urunAdi, planNo, planTarihi,
     planKod: met(ilk.plan_no), planRev: met(ilk.rev_no),
     ozet: {
       adim: Object.keys(fd.processSteps).length,
@@ -458,6 +511,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
       hata: Object.keys(fd.failureModes).length,
       neden: Object.keys(fd.failureCauses).length,
       girdi: bom.length, elenen: bomTum.length - bom.length, planiOlmayan,
+      agacKalem: bomTum.length,
       uyarlanan, opKartiYok,
     },
   };

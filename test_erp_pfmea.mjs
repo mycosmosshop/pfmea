@@ -300,5 +300,62 @@ assert.strictEqual(tAks.status, 'Completed', 'onceki projede yapilmis is acik go
 assert.strictEqual(tAks.completionDate, '2026-03-16');
 assert.strictEqual(tAks.responsiblePerson, 'Mete', 'sorumlu korunmali');
 
+
+// -- Girdi olcutu: giris satiri olan HER kalem (yari mamul dahil) --
+// 203.20.413 yari mamuldur ama kendi giris kontrol plani vardir; kod kurali
+// onu hammadde saymaz, yine de FMEA ya girmeli.
+assert.strictEqual(K.girdiSatirlari('909.4.018', [{ olculecek: 'a' }]).length, 1,
+  'kod kurali hammadde: bayraksiz eski planin tamami girdi sayilir');
+assert.strictEqual(K.girdiSatirlari('203.20.413', [{ olculecek: 'a' }]).length, 0,
+  'yari mamulun proses plani girdi adimina donmemeli');
+assert.strictEqual(K.girdiSatirlari('203.20.413', [{ olculecek: 'a', giris: 1 }, { olculecek: 'b' }]).length, 1,
+  'giris bayragi varsa yari mamul de girdi adimi alir, yalniz giris satirlariyla');
+assert.strictEqual(K.girdiSatirlari('909.4.018', []).length, 0, 'plani yoksa adim acilmaz');
+
+const fdYari = K.iskeletUret({ kod: 'X', ad: 'X' },
+  [{ tuketim_kodu: '203.20.413', tuketim_adi: 'YARI MAMUL' },
+   { tuketim_kodu: '944.4.KFR30-065-1', tuketim_adi: 'FR KROS' }],
+  [], [],
+  { '203.20.413': [{ olculecek: 'Kalinlik', giris: 1, yontem: 'Mikrometre' }],
+    '944.4.KFR30-065-1': [{ olculecek: 'Yogunluk', giris: 1, yontem: 'Terazi' }] },
+  'kontrol plani');
+assert.strictEqual(Object.keys(fdYari.processSteps).length, 2,
+  'giris plani olan yari mamul de girdi adimi almali');
+
+
+// -- Urun agaci COK SEVIYELI taranmali --
+// 203.0.414 -> 203.30.414 -> 203.50.414 -> 203.20.413 -> {944..., 952...}
+// Alt seviyedeki hammaddelerin girdi kontrol plani vardi ama hic gorulmuyordu.
+// H* kodlari kod kuralina gore HAMMADDE (orta parca .4.), Y* yari mamul (.20.)
+const AGAC = {
+  '203.0.K':  [{ urun_kodu: '203.0.K', tuketim_kodu: '203.20.Y1', tuketim_adi: 'yari' },
+                { urun_kodu: '203.0.K', tuketim_kodu: '909.4.H1', tuketim_adi: 'ham1' }],
+  '203.20.Y1': [{ urun_kodu: '203.20.Y1', tuketim_kodu: '203.20.Y2', tuketim_adi: 'yari2' }],
+  '203.20.Y2': [{ urun_kodu: '203.20.Y2', tuketim_kodu: '909.4.H2', tuketim_adi: 'ham2' },
+                 { urun_kodu: '203.20.Y2', tuketim_kodu: '909.4.H3', tuketim_adi: 'ham3', varsayilan: false }],
+};
+const okundu = [];
+const oku = async (kodlar) => { okundu.push([...kodlar]); return kodlar.flatMap(k => AGAC[k] || []); };
+const hicTazele = async () => {};
+const duz = await K.agacDuz('203.0.K', oku, hicTazele);
+assert.deepStrictEqual(duz.map(x => x.tuketim_kodu).sort(), ['203.20.Y1', '203.20.Y2', '909.4.H1', '909.4.H2'],
+  'alt seviyedeki hammaddeler de gelmeli; varsayilan olmayan dal gelmemeli');
+assert.deepStrictEqual(okundu[0], ['203.0.K'], 'seviye seviye okunmali');
+
+// Dongu: A -> B -> A sonsuz donmemeli
+const DONGU = { '203.20.A': [{ urun_kodu: '203.20.A', tuketim_kodu: '203.20.B' }],
+                '203.20.B': [{ urun_kodu: '203.20.B', tuketim_kodu: '203.20.A' }] };
+const dz = await K.agacDuz('203.20.A', async ks => ks.flatMap(k => DONGU[k] || []), hicTazele);
+assert.deepStrictEqual(dz.map(x => x.tuketim_kodu), ['203.20.B'], 'dongude tekrar eklenmemeli');
+
+// Agaci ERP de olmayan kalem icin LeanSys ten BIR kez cekilmeli
+const cagri = [];
+let ilk = true;
+const okuBir = async (ks) => { if (ilk) { ilk = false; return []; } return ks.flatMap(k => AGAC[k] || []); };
+const dz2 = await K.agacDuz('203.0.K', okuBir, async (yol, kod) => { cagri.push([yol, kod]); });
+assert.deepStrictEqual(cagri, [['refreshbom', '203.0.K']],
+  'eksik agac icin BIR kez LeanSys cagrilmali; hammadde yapraklari icin cagrilmamali');
+assert.ok(dz2.length > 0, 'cekildikten sonra agac okunmali');
+
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');
