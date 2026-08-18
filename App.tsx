@@ -246,12 +246,12 @@ const initialProjectData: ProjectData = {
     projectId: 'SF100',
     client: 'VW',
     engineeringLocation: 'Çerkezköy',
-    personResponsible: 'volkan',
+    personResponsible: 'Volkan Pekatik',
     fmeaNumberVersion: '1',
     productName: '6FA11122',
     firstFmeaDate: '2025-10-03',
-    fmeaCreator: 'volkan',
-    fmeaApprover: 'Unal',
+    fmeaCreator: 'Volkan Pekatik',
+    fmeaApprover: 'Ünal Ürkmez',
     teamMembers: 'Umut, Volkan, Una, Aysegul',
     showTeamInHeader: false,
     notes: '',
@@ -2012,7 +2012,7 @@ const App: React.FC = () => {
 
   const renderViewComponent = (view: EditorView) => {
     switch (view) {
-        case 'project': return <ProjectDataView data={projectData} onSave={handleProjectDataSave} projectCount={projects.length} onNavigate={handleNavigateProject} />;
+        case 'project': return <ProjectDataView data={projectData} onSave={handleProjectDataSave} projectCount={projects.length} onNavigate={handleNavigateProject} kisiler={registryData.responsiblePeople || []} />;
         case 'history': return <ProjectHistoryView data={projectData} onSave={handleProjectDataSave} onLogChanges={handleLogRevision} />;
         case 'config': return <ProjectConfigurationView data={data} projects={projects.filter(p => p.id !== currentProjectId)} onDataUpdate={setData} onCopyToProject={handleCopyToProject} />;
         case 'tree': return <FmeaTreeView data={data} onOpenModal={handleOpenModal} onDeleteItem={handleDelete} onAddItem={handleAddItem} onOpenSeverityModal={handleOpenSeverityModal} onOpenOccurrenceModal={handleOpenOccurrenceModal} onOpenDetectionModal={handleOpenDetectionModal} onReorder={handleReorder} />;

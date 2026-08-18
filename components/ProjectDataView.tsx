@@ -18,6 +18,16 @@ const TextInput: React.FC<{ id: string; name: keyof FmeaProjectData | keyof CpPr
     <input type="text" id={id} name={name} value={value} onChange={onChange} className="w-full text-sm border border-gray-400 bg-white px-2 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
 );
 
+// Kisi alani: lokasyonun sorumlu listesinden secilir, gerekirse elle yazilir.
+const KisiInput: React.FC<{ id: string; name: any; value: string; kisiler: string[];
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; }> = ({ id, name, value, kisiler, onChange }) => (
+    <>
+        <input type="text" id={id} name={name} value={value} onChange={onChange} list={`kisi_${id}`}
+            className="w-full text-sm border border-gray-400 bg-white px-2 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+        <datalist id={`kisi_${id}`}>{kisiler.map(k => <option key={k} value={k} />)}</datalist>
+    </>
+);
+
 const DateInput: React.FC<{ id: string; name: keyof FmeaProjectData | keyof CpProjectData | keyof PfProjectData; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; }> = ({ id, name, value, onChange }) => (
     <input type="date" id={id} name={name} value={value} onChange={onChange} className="w-full text-sm border border-gray-400 bg-white px-2 py-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
 );
@@ -42,10 +52,11 @@ interface ProjectDataViewProps {
     data: ProjectData;
     onSave: (newData: ProjectData) => void;
     projectCount: number;
+    kisiler?: string[];
     onNavigate: (direction: 'next' | 'previous') => void;
 }
 
-const ProjectDataView: React.FC<ProjectDataViewProps> = ({ data, onSave, projectCount, onNavigate }) => {
+const ProjectDataView: React.FC<ProjectDataViewProps> = ({ data, onSave, projectCount, kisiler = [], onNavigate }) => {
     const [activeTab, setActiveTab] = useState<'fmea' | 'cp' | 'pf'>('fmea');
     const [isFileLinksModalOpen, setFileLinksModalOpen] = useState(false);
     const [formData, setFormData] = useState<ProjectData>(data);
@@ -132,12 +143,12 @@ const ProjectDataView: React.FC<ProjectDataViewProps> = ({ data, onSave, project
                 <LabeledInput label="Project ID" id="projectId"><TextInput id="projectId" name="projectId" value={formData.fmea.projectId} onChange={fmeaHandleChange} /></LabeledInput>
                 <LabeledInput label="Client" id="client"><TextInput id="client" name="client" value={formData.fmea.client} onChange={fmeaHandleChange} /></LabeledInput>
                 <LabeledInput label="Engineering Location" id="engineeringLocation"><TextInput id="engineeringLocation" name="engineeringLocation" value={formData.fmea.engineeringLocation} onChange={fmeaHandleChange} /></LabeledInput>
-                <LabeledInput label="Person responsible" id="personResponsible"><TextInput id="personResponsible" name="personResponsible" value={formData.fmea.personResponsible} onChange={fmeaHandleChange} /></LabeledInput>
+                <LabeledInput label="Person responsible" id="personResponsible"><KisiInput id="personResponsible" name="personResponsible" value={formData.fmea.personResponsible} onChange={fmeaHandleChange} kisiler={kisiler} /></LabeledInput>
                 <LabeledInput label="FMEA Number /Version" id="fmeaNumberVersion"><TextInput id="fmeaNumberVersion" name="fmeaNumberVersion" value={formData.fmea.fmeaNumberVersion} onChange={fmeaHandleChange} /></LabeledInput>
                 <LabeledInput label="Number/Name of product" id="productName"><TextInput id="productName" name="productName" value={formData.fmea.productName} onChange={fmeaHandleChange} /></LabeledInput>
                 <LabeledInput label="Date of first FMEA" id="firstFmeaDate"><DateInput id="firstFmeaDate" name="firstFmeaDate" value={formData.fmea.firstFmeaDate} onChange={fmeaHandleChange} /></LabeledInput>
-                <LabeledInput label="FMEA Creator" id="fmeaCreator"><TextInput id="fmeaCreator" name="fmeaCreator" value={formData.fmea.fmeaCreator} onChange={fmeaHandleChange} /></LabeledInput>
-                <LabeledInput label="FMEA Approver" id="fmeaApprover"><TextInput id="fmeaApprover" name="fmeaApprover" value={formData.fmea.fmeaApprover} onChange={fmeaHandleChange} /></LabeledInput>
+                <LabeledInput label="FMEA Creator" id="fmeaCreator"><KisiInput id="fmeaCreator" name="fmeaCreator" value={formData.fmea.fmeaCreator} onChange={fmeaHandleChange} kisiler={kisiler} /></LabeledInput>
+                <LabeledInput label="FMEA Approver" id="fmeaApprover"><KisiInput id="fmeaApprover" name="fmeaApprover" value={formData.fmea.fmeaApprover} onChange={fmeaHandleChange} kisiler={kisiler} /></LabeledInput>
                 
                 <LabeledInput label="Team members" id="teamMembers" className="col-span-2">
                     <div className="flex items-start space-x-4">
