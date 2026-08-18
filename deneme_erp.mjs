@@ -28,7 +28,15 @@ for (const st of Object.values(s.fmeaData.processSteps)) {
       + `  ${c.remarks.startsWith('BENZER') ? '[uyarlandı]' : ''}`);
   }
 }
-const ornek = Object.values(s.fmeaData.failureCauses).find(c => c.remarks.startsWith('BENZER'));
+const akis = Object.values(s.fmeaData.processStepFunctions).filter(f => f.flowchartSymbol).length;
+console.log(`
+akis semasi satiri: ${akis}  (adim sayisi: ${s.ozet.adim})`);
+const g = Object.values(s.fmeaData.processSteps).find(x => x.name.startsWith('Girdi'));
+const gf = s.fmeaData.processStepFunctions[g.functionIds[0]];
+console.log('girdi ornekleme sikligi:', gf.sampleFrequency);
+console.log('girdi tespit kontrol   :', s.fmeaData.failureCauses[Object.keys(s.fmeaData.failureCauses)[0]].detectionControl);
+console.log('remarks (ilk 3)        :', JSON.stringify(Object.values(s.fmeaData.failureCauses).slice(0,3).map(c => c.remarks)));
+const ornek = Object.values(s.fmeaData.failureCauses).find(c => c.preventionControl && c.preventionControl.length > 25);
 if (ornek) {
   console.log('\nUYARLANAN ÖRNEK');
   console.log('  neden      :', ornek.description);

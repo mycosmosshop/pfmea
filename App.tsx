@@ -504,8 +504,9 @@ const App: React.FC = () => {
     setErpMesgul(true); setErpDurum('ERP verisi okunuyor ve PFMEA üretiliyor…');
     try {
       const s = await erpdenUret(kod);
-      const yeni = createNewProjectState();
+      const yeni: any = createNewProjectState();
       yeni.fmeaData = s.fmeaData;
+      yeni.otomatik = true;   // hafiza bu projeden ogrenmesin (kendi ciktisi)
       // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
       // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
       const bugun = new Date().toISOString().slice(0, 10);
@@ -516,7 +517,10 @@ const App: React.FC = () => {
         fmea: { ...pd.fmea,
           project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})`,
           firstFmeaDate: tarih, lastRevisionDate: tarih,
-          fmeaNumberVersion: s.planRev || pd.fmea.fmeaNumberVersion,
+          // Diger projelerdeki bicim: "<plan no> / Rev.<nn>" (or. 1 / Rev.00)
+          fmeaNumberVersion: [s.planKod, `Rev.${String(s.planRev || '0').padStart(2, '0')}`]
+            .filter(Boolean).join(' / '),
+          projectId: `proj_${kod.replace(/[.\-]/g, '_')}`,
         },
         cp: { ...(pd.cp || {}),
           controlPlanNumber: s.planKod || (pd.cp || {}).controlPlanNumber,
@@ -529,12 +533,13 @@ const App: React.FC = () => {
           ...((pd.history as any[]) || []),
           { id: `h_${Date.now()}`, revision: s.planRev || '0', date: tarih,
             changeDescription: `ERP'den otomatik üretildi — ${s.ozet.adim} proses adımı, ${s.ozet.karakteristik} karakteristik`
-              + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} neden benzer projelerden uyarlandı` : ''),
+              + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} karakteristik benzer projelerden uyarlandı` : ''),
             changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`,
             preparedBy: '', approvedBy: '' },
         ],
       } as any;
       await saveProject(yeni);
+      setProjects(await getAllProjects());   // panoda hemen gorunsun (diger kayitlarla ayni akis)
       setErpMesgul(false); setErpAcik(false);
       setCurrentProjectId(yeni.id);
       setData(yeni.fmeaData);
@@ -545,7 +550,7 @@ const App: React.FC = () => {
       alert(`PFMEA üretildi\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
         + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
-        + `Benzer projelerden uyarlanan neden: ${s.ozet.uyarlanan}\n`
+        + `Benzer projelerden uyarlanan karakteristik: ${s.ozet.uyarlanan}\n`
         + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)' : ' (planda tarih yok — bugün)'}`
         + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : '')
         + (s.ozet.opKartiYok ? `\n\nUYARI: Operasyon kartı ERP'de yok (LeanSys'ten de gelmedi) — proses adımları kontrol planındaki op numaralarından kuruldu; makine adlarını kontrol edin.` : ''));

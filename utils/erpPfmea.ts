@@ -81,10 +81,18 @@ export function apHesapla(S: number, O: number, D: number): 'H' | 'M' | 'L' {
 export function onlemeKontrol(it: any): string {
   return metinS(it.proses_kontrol) || 'Proses talimatı + operatör eğitimi (FR17)';
 }
-export function tespitKontrol(it: any): string {
+// Ornekleme sikligi: plandan ham sayi geliyor (dakika). Girdi kontrolunde
+// sure olcusu anlamsiz - malzeme lot bazinda kontrol edilir.
+export function siklik(it: any, girdiMi: boolean): string {
+  if (girdiMi) return 'Her lot';
+  const t = metinS(it.ornekleme_sikligi);
+  return /^\d+$/.test(t) ? `${t} dk` : t;
+}
+export function tespitKontrol(it: any, girdiMi = false): string {
   const p = [metinS(it.yontem) || 'Tanımlı ölçüm yöntemi yok'];
-  if (met(it.ornekleme_buyuklugu)) p.push(met(it.ornekleme_buyuklugu) + ' adet');
-  if (met(it.ornekleme_sikligi)) p.push(met(it.ornekleme_sikligi));
+  if (metinS(it.ornekleme_buyuklugu)) p.push(met(it.ornekleme_buyuklugu) + ' adet');
+  const sk = siklik(it, girdiMi);
+  if (sk) p.push(sk);
   return p.join(' · ');
 }
 // Aksiyon hedef tarihi kontrol plani revizyon tarihinden turetilir; yuksek AP
@@ -128,7 +136,8 @@ export interface HafizaKayit {
 }
 export type Hafiza = Record<string, HafizaKayit>;
 
-// Bu isaretleri tasiyan nedenler bu uretim tarafindan yazilmistir
+// Uretilen projeler data.otomatik ile isaretlenir; hafiza bunlari atlar.
+// Eski projelerde isaret remarks metnindeydi - geriye donuk guvence olarak kalir.
 export const OTOMATIK = /^(OTOMATİK ÖNERİ|BENZER PROJEDEN)/;
 
 // Turkce duyarli sadelestirme: eslesme "GRAMAJ" ile "gramaj (gr/m2)" arasinda da tutsun
@@ -155,6 +164,7 @@ export async function hafizaYukle(): Promise<Hafiza> {
 export function hafizaKur(projeler: any[]): Hafiza {
   const h: Hafiza = {};
   projeler.forEach((pr: any) => {
+    if (pr?.data?.otomatik) return;      // kendi urettigimiz projeden ogrenme
     const fd = pr?.data?.fmeaData; if (!fd) return;
     const fns = fd.processStepFunctions || {}, modes = fd.failureModes || {},
           causes = fd.failureCauses || {}, effects = fd.failureEffects || {};
@@ -269,7 +279,9 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
       ? (a.kendi ? kendiGirdi : girdiSatir(a.kod))
       : plan.filter(x => !Number(x.giris) && opNo(x.op_no) === a.op);
 
-    maddeler.forEach(it => {
+    // Akis semasi ADIM bazlidir: sembol adimda yalniz ilk karakteristige
+    // verilir, yoksa 7 karakteristikli bir adim akisda 7 ayni satir olur.
+    maddeler.forEach((it, sira) => {
       const fid = `f_${++nf}`;
       const spec = [met(it.hedef_nicel), met(it.hedef_nitel)].filter(Boolean).join(' ')
         || [met(it.alt_limit), met(it.ust_limit)].filter(Boolean).join(' – ')
@@ -277,7 +289,7 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
       fd.processStepFunctions[fid] = {
         id: fid, name: `${met(it.olculecek)} değerini şartname sınırlarında tutmak`,
         clientType: 'E', sampleSize: met(it.ornekleme_buyuklugu), controlMethod: onlemeKontrol(it),
-        failureModeIds: [], flowchartSymbol: a.sembol, sampleFrequency: met(it.ornekleme_sikligi),
+        failureModeIds: [], flowchartSymbol: sira === 0 ? a.sembol : '', sampleFrequency: siklik(it, a.girdi),
         processDescription: a.ad, includeInControlPlan: true,
         productCharacteristic: met(it.olculecek), productSpecificationTolerance: spec,
         evaluationMeasurementTechnique: met(it.yontem),
@@ -317,11 +329,11 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
               completionDate: '', responsiblePerson: '',
               targetCompletionDate: hedefTarih(planTarihi, ap),
             })),
-            remarks: `BENZER PROJEDEN UYARLANDI — kaynak: ${hk.kaynak}. Mevcut kontroller ${kaynakNot} ile teyit edilmelidir.`,
+            remarks: '',
             detection: Number(kn.detection) || D, occurrence: Number(kn.occurrence) || O,
             description: met(kn.description), actionPriority: ap,
             revisedSeverity: null,
-            detectionControl: metinS(kn.detectionControl) || tespitKontrol(it), revisedDetection: null,
+            detectionControl: metinS(kn.detectionControl) || tespitKontrol(it, a.girdi), revisedDetection: null,
             preventionControl: metinS(kn.preventionControl) || onlemeKontrol(it), revisedOccurrence: null,
             processWorkElement: met(kn.processWorkElement), workElementFunction: met(kn.workElementFunction),
           };
@@ -342,9 +354,9 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
               completionDate: '', responsiblePerson: '',
               targetCompletionDate: hedefTarih(planTarihi, ap),
             })),
-            remarks: `OTOMATİK ÖNERİ — ${kaynakNot} esas alındı; S/O/D ve aksiyonlar ekip tarafından doğrulanmalıdır.`,
+            remarks: '',
             detection: D, occurrence: O, description: aciklama, actionPriority: ap,
-            revisedSeverity: null, detectionControl: tespitKontrol(it), revisedDetection: null,
+            revisedSeverity: null, detectionControl: tespitKontrol(it, a.girdi), revisedDetection: null,
             preventionControl: onlemeKontrol(it), revisedOccurrence: null,
             processWorkElement: oge, workElementFunction: '',
           };
@@ -420,7 +432,9 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
   const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi);
-  const uyarlanan = Object.values<any>(fd.failureCauses).filter(c => String(c.remarks).startsWith('BENZER')).length;
+  // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
+  const uyarlanan = Object.values<any>(fd.processStepFunctions)
+    .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;
 
   return {
     fmeaData: fd, urunAdi, planNo, planTarihi,

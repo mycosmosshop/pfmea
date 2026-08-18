@@ -88,8 +88,7 @@ const c1 = fd.failureCauses[m1.causeIds[0]];
 assert.strictEqual(c1.occurrence, 3);
 assert.strictEqual(c1.detection, 5);
 assert.strictEqual(c1.actionPriority, K.apHesapla(8, 3, 5));
-assert.ok(c1.remarks.includes('OTOMATİK ÖNERİ') && c1.remarks.includes('Plan 1'),
-  'kaydın otomatik olduğu ve kaynağı remarks’ta yazmalı');
+assert.strictEqual(c1.remarks, '', 'remarks ekibin alanı — üretim doldurmamalı');
 assert.ok(c1.actions.length >= 1);
 
 // Girdi adımı: kendi malzemesinin karakteristiği + tedarikçi odaklı nedenler
@@ -188,8 +187,7 @@ assert.strictEqual(hc.description, 'Hammadde FR katkı oranı düşük');
 assert.strictEqual(hc.preventionControl, 'Her partide sertifika kontrolü', 'mevcut önleme yazılmalı');
 assert.strictEqual(hc.detectionControl, 'FMVSS 302 yanma testi');
 assert.strictEqual(hc.occurrence, 4);
-assert.ok(hc.remarks.includes('BENZER PROJEDEN') && hc.remarks.includes('205.0.214'),
-  'uyarlamanın kaynağı remarks’ta yazmalı');
+assert.strictEqual(hc.remarks, '', 'uyarlamada da remarks boş kalmalı');
 assert.strictEqual(hc.actions[0].description, 'Tedarikçiden her partide FR sertifikası istenmektedir.');
 assert.strictEqual(hc.actions[0].actionTaken, 'Mevcut sertifika kontrolü', 'yapılan iş metni korunmalı');
 assert.strictEqual(hc.actions[0].responsiblePerson, '', 'sorumlu bu ürün için boşaltılmalı');
@@ -208,7 +206,8 @@ assert.strictEqual(hc.actions[0].targetCompletionDate, K.hedefTarih('2026-03-10'
 const fdK = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
   [planSatir(1, 'Kesim ölçüsü')], {}, 'kontrol planı', hafiza, '2026-03-10');
 const kc = Object.values(fdK.failureCauses)[0];
-assert.ok(kc.remarks.includes('OTOMATİK ÖNERİ'), 'eşleşme yoksa kural tabanlı üretim');
+assert.strictEqual(kc.description, 'Proses parametresi sapması (ayar/hız/sıcaklık)',
+  'eşleşme yoksa kural tabanlı üretim');
 assert.ok(kc.actions[0].targetCompletionDate, 'kural tabanlı aksiyonda da hedef tarih olmalı');
 
 
@@ -237,6 +236,44 @@ assert.strictEqual(hIns['gramaj'].severity, 7);
 assert.ok(K.onlemeKontrol({ proses_kontrol: 0 }).includes('FR17'), '0 → metin değil, varsayılan');
 assert.ok(K.onlemeKontrol({ proses_kontrol: '0' }).includes('FR17'));
 assert.ok(K.tespitKontrol({ yontem: 0 }).startsWith('Tanımlı'), '0 → yöntem tanımsız sayılmalı');
+
+
+// ── Üretilen proje hafızaya girmemeli (işaret artık proje düzeyinde) ──
+const otoProje = proje('D', '');
+otoProje.data.otomatik = true;
+assert.strictEqual(Object.keys(K.hafizaKur([otoProje])).length, 0,
+  'otomatik üretilmiş proje hafızaya alınmamalı');
+
+// ── Örnekleme sıklığı: girişte "Her lot", proseste dakika ──
+// (plandan ham sayı geliyor: 60 → girdide "60" yazıyordu)
+assert.strictEqual(K.siklik({ ornekleme_sikligi: 60 }, true), 'Her lot', 'girdi lot bazında');
+assert.strictEqual(K.siklik({ ornekleme_sikligi: 60 }, false), '60 dk');
+assert.strictEqual(K.siklik({ ornekleme_sikligi: 'Her vardiya' }, false), 'Her vardiya', 'metin korunmalı');
+assert.strictEqual(K.siklik({}, true), 'Her lot');
+assert.strictEqual(K.tespitKontrol({ yontem: 'TL 07', ornekleme_buyuklugu: 1, ornekleme_sikligi: 60 }, true),
+  'TL 07 · 1 adet · Her lot');
+assert.strictEqual(K.tespitKontrol({ yontem: 'TL 07', ornekleme_buyuklugu: 0, ornekleme_sikligi: 60 }, false),
+  'TL 07 · 60 dk', 'örnek büyüklüğü 0 ise yazılmamalı');
+
+const fdLot = K.iskeletUret({ kod: 'X', ad: 'X' }, [{ tuketim_kodu: '909.4.018', tuketim_adi: 'A' }], [], [],
+  { '909.4.018': [{ olculecek: 'Kalınlık', yontem: 'Mikrometre', ornekleme_sikligi: 60, giris: 1 }] },
+  'kontrol planı');
+const lf = Object.values(fdLot.processStepFunctions)[0];
+assert.strictEqual(lf.sampleFrequency, 'Her lot', 'girdi adımında sıklık Her lot olmalı');
+const lc = Object.values(fdLot.failureCauses)[0];
+assert.ok(lc.detectionControl.includes('Her lot') && !lc.detectionControl.includes('60'),
+  'girdi tespit kontrolünde 60 dk yazmamalı');
+
+
+// -- Akis semasinda adim basina TEK satir --
+// (7 karakteristikli adim akisda 7 ayni satir olarak tekrarliyordu)
+const fdAkis = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [planSatir(1, 'A'), planSatir(1, 'B'), planSatir(1, 'C')], {}, 'kontrol plani');
+const semboller = Object.values(fdAkis.processStepFunctions).map(f => f.flowchartSymbol);
+assert.strictEqual(semboller.filter(Boolean).length, 1, 'adim basina tek akis satiri');
+assert.strictEqual(semboller[0], 'process', 'sembol ilk karakteristikte olmali');
+assert.strictEqual(Object.keys(fdAkis.processStepFunctions).length, 3,
+  'karakteristikler FMEA tarafinda eksilmemeli');
 
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');
