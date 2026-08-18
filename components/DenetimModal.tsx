@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import type { FmeaData } from '../types';
 import { denetle, ozetle, Bulgu } from '../utils/denetim';
 
+declare const XLSX: any;
+
 // Tamlık denetimi: FMEA bittikten sonra "her konu değerlendirildi mi?"
 // sorusunu satır satır listeler. Salt okunur — düzeltme FMEA içinde yapılır.
 export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> = ({ allData, onClose }) => {
@@ -10,6 +12,26 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
   const [suzgec, setSuzgec] = useState<string>('');
 
   const gorunen = suzgec ? bulgular.filter(b => b.kural === suzgec) : bulgular;
+
+  // Yapilacaklar listesi olarak disa aktar: Karar/Sorumlu/Termin/Durum bos
+  // birakilir, ekip Excel'de doldurup takip eder. Suzgec uygulanmissa yalniz
+  // gorunen satirlar aktarilir.
+  const excelAktar = () => {
+    const ws = XLSX.utils.json_to_sheet(gorunen.map(b => ({
+      'Seviye': b.seviye === 'eksik' ? 'EKSİK' : 'UYARI',
+      'Konu': b.kural,
+      'Konum': b.konum,
+      'Bulgu': b.mesaj,
+      'Karar': '',        // Yapilacak / Gerekcelendirildi-kapatildi
+      'Sorumlu': '',
+      'Termin': '',
+      'Durum': 'Açık',
+    })));
+    ws['!cols'] = [{wch:8},{wch:12},{wch:50},{wch:70},{wch:26},{wch:16},{wch:12},{wch:10}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Denetim');
+    XLSX.writeFile(wb, 'Tamlik_Denetimi.xlsx');
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
@@ -21,7 +43,14 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
               AIAG-VDA 7 adım + 4M kapsamına göre eksik değerlendirme listesi. Düzeltmeler FMEA içinde yapılır.
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-xl px-2">×</button>
+          <div className="flex items-center gap-2">
+            <button onClick={excelAktar} disabled={!gorunen.length}
+              title="Görünen satırları yapılacaklar listesi olarak Excel'e aktarır (Karar/Sorumlu/Termin sütunlarıyla)"
+              className="px-3 py-1 text-sm border rounded bg-gray-100 hover:bg-gray-200 border-gray-300 disabled:opacity-50">
+              Excel (to-do)
+            </button>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-xl px-2">×</button>
+          </div>
         </div>
 
         <div className="px-5 py-3 flex flex-wrap items-center gap-2 border-b bg-gray-50">
@@ -74,9 +103,11 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
         </div>
 
         <div className="px-5 py-3 border-t text-xs text-gray-500">
-          Kontroller: adım/karakteristik/hata türü zinciri · üç seviyeli etki (End user / Ship to Plant / In-Plant) ·
-          neden kapsamı (İnsan-Makine-Malzeme-Metot) · S/O/D aralıkları · mevcut önleme+tespit ·
-          AP=H'de zorunlu aksiyon, AP=M'de gerekçe · aksiyon sorumlusu · girdi adımı varlığı.
+          <b>EKSİK</b> standart gereğidir, kapatılmalıdır. <b>UYARI</b> zorunlu değildir: ekip değerlendirir,
+          ya düzeltilir ya da "değerlendirildi, gerek yok" diye gerekçelendirilip kapatılır — ikisi de geçerli kapanıştır.
+          <span className="mx-1 text-gray-300">|</span>
+          Kontroller: zincir · üç seviyeli etki · 4M neden kapsamı · S/O/D aralıkları · önleme+tespit ·
+          AP=H'de zorunlu aksiyon, AP=M'de gerekçe · aksiyon sorumlusu · girdi adımı.
         </div>
       </div>
     </div>
