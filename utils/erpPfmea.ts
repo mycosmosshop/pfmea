@@ -212,6 +212,7 @@ export interface UretimSonuc {
   planTarihi: string;
   planKod: string;
   planRev: string;
+  pfListesi: string[];
 }
 
 // ── İskelet üretici (saf: test edilebilir) ────────────────────────────────
@@ -303,8 +304,13 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
       const O = olasilik(it), D = tespit(it);
       const mid = `m_${++nm}`, eid = `e_${++ne}`;
       const emn = emniyetMi(it);
+      // PF (Process Function): etkinin bagli oldugu fonksiyon. Uretimde bos
+      // kaliyordu; karakteristik + sartnameden turetilir (kayit defterindeki
+      // "yapistirma 25N (+-3)" bicimiyle ayni).
+      const pfAdi = met(it.olculecek) + (spec && spec !== '—' ? ` (${spec})` : '');
       fd.failureEffects[eid] = {
         id: eid, severity: S, clientType: 'E',
+        selectedPFByType: { E: pfAdi },
         effectText: hk ? hk.effectText : emn
           ? `End user:\nYanma davranışı / yasal şartname uygunsuzluğu — can güvenliği ve mevzuat riski. (${S})\nShip to Plant:\nMüşteri hattında red, yasal uygunsuzluk bildirimi. (${S})\nIn-Plant:\nToplu blokaj, geri çağırma riski. (${S})`
           : `End user:\n— (—)\nShip to Plant:\n${met(it.olculecek)} uygunsuzluğu nedeniyle montaj/işlev sapması. (${S})\nIn-Plant:\nYeniden işlem, hurda, hat duruşu. (${S})`,
@@ -322,12 +328,16 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
           const ap = kn.actionPriority || apHesapla(S, Number(kn.occurrence) || O, Number(kn.detection) || D);
           fd.failureCauses[cid] = {
             id: cid,
+            // Onceki projeden gelen aksiyon zaten yapilmis bir istir (mevcut
+            // uygulama); durumu, tarihi ve sorumlusu korunur - gorev listesinde
+            // yeniden "acik is" olarak cikmasin.
             actions: (kn.actions || []).map((ak: any, i: number) => ({
               id: `${cid}_a${i + 1}`, type: ak.type || 'prevention', number: i + 1,
-              status: 'Open', actionTaken: met(ak.actionTaken),
+              status: met(ak.status) || 'Open', actionTaken: met(ak.actionTaken),
               description: met(ak.description),
-              completionDate: '', responsiblePerson: '',
-              targetCompletionDate: hedefTarih(planTarihi, ap),
+              completionDate: met(ak.completionDate),
+              responsiblePerson: met(ak.responsiblePerson),
+              targetCompletionDate: met(ak.targetCompletionDate) || hedefTarih(planTarihi, ap),
             })),
             remarks: '',
             detection: Number(kn.detection) || D, occurrence: Number(kn.occurrence) || O,
@@ -432,12 +442,15 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
   const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi);
+  // Uretilen PF adlari kayit defterine eklenecek (acilir listede gorunsun)
+  const pfListesi = [...new Set(Object.values<any>(fd.failureEffects)
+    .map(e => e.selectedPFByType?.E).filter(Boolean))] as string[];
   // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
   const uyarlanan = Object.values<any>(fd.processStepFunctions)
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;
 
   return {
-    fmeaData: fd, urunAdi, planNo, planTarihi,
+    fmeaData: fd, urunAdi, planNo, planTarihi, pfListesi,
     planKod: met(ilk.plan_no), planRev: met(ilk.rev_no),
     ozet: {
       adim: Object.keys(fd.processSteps).length,

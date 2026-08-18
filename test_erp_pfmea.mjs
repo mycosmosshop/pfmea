@@ -190,17 +190,17 @@ assert.strictEqual(hc.occurrence, 4);
 assert.strictEqual(hc.remarks, '', 'uyarlamada da remarks boş kalmalı');
 assert.strictEqual(hc.actions[0].description, 'Tedarikçiden her partide FR sertifikası istenmektedir.');
 assert.strictEqual(hc.actions[0].actionTaken, 'Mevcut sertifika kontrolü', 'yapılan iş metni korunmalı');
-assert.strictEqual(hc.actions[0].responsiblePerson, '', 'sorumlu bu ürün için boşaltılmalı');
-assert.strictEqual(hc.actions[0].completionDate, '', 'tamamlanma bu ürün için boşaltılmalı');
-assert.strictEqual(hc.actions[0].status, 'Open');
+// Önceki projede yapılmış iş, yeni projede yeniden "açık görev" olmamalı
+assert.strictEqual(hc.actions[0].responsiblePerson, 'Ali', 'sorumlu korunmalı');
+assert.strictEqual(hc.actions[0].completionDate, '2026-01-01', 'tamamlanma tarihi korunmalı');
+assert.strictEqual(hc.actions[0].status, 'Completed');
 
 // ── Hedef tarih kontrol planı tarihinden ──
 assert.strictEqual(K.hedefTarih('', 'H').length, 10, 'plan tarihi yoksa bugünden');
 assert.strictEqual(K.hedefTarih('2026-03-10', 'H'), '2026-04-09', 'AP=H → 30 gün');
 assert.strictEqual(K.hedefTarih('2026-03-10', 'M'), '2026-05-09', 'AP=M → 60 gün');
 assert.strictEqual(K.hedefTarih('2026-03-10', 'L'), '2026-06-08', 'AP=L → 90 gün');
-assert.strictEqual(hc.actions[0].targetCompletionDate, K.hedefTarih('2026-03-10', 'H'),
-  'aksiyon hedef tarihi plan tarihine bağlı olmalı');
+assert.strictEqual(hc.actions[0].targetCompletionDate, '2026-01-01', 'kaynaktaki hedef tarih korunmalı');
 
 // Hafızada karşılığı olmayan karakteristik kurallara düşmeli
 const fdK = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
@@ -274,6 +274,31 @@ assert.strictEqual(semboller.filter(Boolean).length, 1, 'adim basina tek akis sa
 assert.strictEqual(semboller[0], 'process', 'sembol ilk karakteristikte olmali');
 assert.strictEqual(Object.keys(fdAkis.processStepFunctions).length, 3,
   'karakteristikler FMEA tarafinda eksilmemeli');
+
+
+// -- PF (Process Function) etkide dolu gelmeli --
+// (agacta "S: 5 | PF: -" yaziyordu)
+const fdPf = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [{ op_no: 1, olculecek: 'Kalinlik', hedef_nicel: 6.5, hedef_nitel: 'mm', yontem: 'Mikrometre' },
+   { op_no: 1, olculecek: 'Gorunum', yontem: 'Gozle' }], {}, 'kontrol plani');
+const pfler = Object.values(fdPf.failureEffects).map(e => e.selectedPFByType?.E);
+assert.deepStrictEqual(pfler, ['Kalinlik (6.5 mm)', 'Gorunum'],
+  'PF karakteristik + sartnameden turemeli; sartname yoksa yalniz karakteristik');
+assert.ok(!pfler.some(x => String(x).includes('—')), 'PF metninde tire kalmamali');
+
+// -- Onceki projeden gelen aksiyon TAMAM gelmeli --
+const hafizaTamam = { 'gramaj': { kaynak: 'P', mode: 'm', effectText: 'e', severity: 6, causes: [{
+  description: 'n', occurrence: 3, detection: 4, actionPriority: 'L',
+  preventionControl: 'p', detectionControl: 'd',
+  actions: [{ type: 'prevention', status: 'Completed', actionTaken: 'yapildi',
+    description: 'Mevcut gorsel talimat', responsiblePerson: 'Mete',
+    completionDate: '2026-03-16', targetCompletionDate: '2026-03-16' }] }] } };
+const fdT = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [planSatir(1, 'Gramaj')], {}, 'kontrol plani', hafizaTamam, '2026-03-10');
+const tAks = Object.values(fdT.failureCauses)[0].actions[0];
+assert.strictEqual(tAks.status, 'Completed', 'onceki projede yapilmis is acik gorev olarak gelmemeli');
+assert.strictEqual(tAks.completionDate, '2026-03-16');
+assert.strictEqual(tAks.responsiblePerson, 'Mete', 'sorumlu korunmali');
 
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { FmeaData, FmeaAction, FailureCause, ModalType } from '../types';
+import { durumDegistir } from '../utils/gorev';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
@@ -211,6 +212,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                         <table className="min-w-full">
                             <thead className="sticky top-0">
                                 <tr>
+                                    <th className={thClass} title="Tamamlandı işaretle">✔</th>
                                     <th className={thClass}>Action type</th>
                                     <th className={thClass}>Recommended Actions</th>
                                     <th className={thClass}>Name</th>
@@ -240,6 +242,12 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                                         title={isManagementMode ? 'Çift tıkla: kaynak FMEA kaydını aç' : 'Çift tıkla: bu görevi seç'}
                                         className={`cursor-pointer ${rowState}`}
                                     >
+                                        <td className={`${tdClass} text-center`} onClick={e => e.stopPropagation()}>
+                                            <input type="checkbox" checked={completed} disabled={!isManagementMode}
+                                                title={isManagementMode ? 'Tamamlandı işaretle' : 'Bu ekranda düzenlenemez'}
+                                                onChange={e => onDataUpdate && onDataUpdate(
+                                                    durumDegistir(allData, action.id, e.target.checked, new Date().toISOString().slice(0, 10)))} />
+                                        </td>
                                         <td className={tdClass}>{action.type === 'prevention' ? 'Prevention Action' : 'Detection Action'}</td>
                                         <td className={tdClass}>{action.description}</td>
                                         <td className={tdClass}>{action.responsiblePerson}</td>
@@ -254,7 +262,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({ allData, onC
                                     );
                                 })}
                                 {allActions.length === 0 && (
-                                    <tr><td colSpan={10} className="text-center py-4 text-gray-500">No actions found in project.</td></tr>
+                                    <tr><td colSpan={11} className="text-center py-4 text-gray-500">No actions found in project.</td></tr>
                                 )}
                             </tbody>
                         </table>
