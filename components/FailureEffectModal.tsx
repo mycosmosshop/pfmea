@@ -11,7 +11,7 @@ export type FailureEffectModalProps = {
 };
 
 const Pill: React.FC<{text: string; onDelete?: () => void}> = ({ text, onDelete }) => (
-    <span className="inline-flex items-center gap-2 bg-gray-200 border border-gray-300 py-1 px-2 rounded-full text-xs">
+    <span className="inline-flex items-center gap-2 bg-gray-200 border border-gray-300 py-1 px-2 rounded-full text-xs max-w-full break-all">
         {text}
         {onDelete && <span onClick={onDelete} className="cursor-pointer text-black opacity-60 hover:opacity-100">&times;</span>}
     </span>
@@ -46,8 +46,8 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
   // Kaydin kendi PF degeri global listede olmayabilir (ERP uretimi her
   // karakteristige kendi PF sini yazar). Global liste sismesin diye oraya
   // eklenmez; yalnizca bu kaydin secenegi listeye katilir.
-  const pfSecenekleri = currentPfSelection && !currentPfList.includes(currentPfSelection)
-    ? [currentPfSelection, ...currentPfList] : currentPfList;
+  const kaydaOzelPf = !!currentPfSelection && !currentPfList.includes(currentPfSelection);
+  const pfSecenekleri = kaydaOzelPf ? [currentPfSelection, ...currentPfList] : currentPfList;
 
   const handleAddClientType = () => {
     const trimmedName = newClientTypeName.trim().toUpperCase();
@@ -139,7 +139,7 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
           <div className="flex flex-col gap-1.5">
               <label className="text-xs text-gray-500">Client type (global liste)</label>
               <div className="flex gap-2 items-center">
-                  <select value={currentClientKey} onChange={e => setLocalData(p => ({...p, clientType: e.target.value}))} className="flex-1 p-2 border border-gray-300 rounded-md bg-white">
+                  <select value={currentClientKey} onChange={e => setLocalData(p => ({...p, clientType: e.target.value}))} className="flex-1 min-w-0 p-2 border border-gray-300 rounded-md bg-white">
                       <option value="">Seçiniz…</option>
                       {registryData.clientTypes.map(type => <option key={type} value={type}>{type}</option>)}
                   </select>
@@ -148,7 +148,7 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
                       onChange={e => setNewClientTypeName(e.target.value)}
                       onKeyDown={handleNewClientTypeKeyDown}
                       placeholder="Yeni tip (örn: X)"
-                      className="flex-1 p-2 border border-gray-300 rounded-md"
+                      className="flex-1 min-w-0 p-2 border border-gray-300 rounded-md"
                   />
               </div>
               <div className="text-xs text-gray-500">Bu listede ekleme/silme GLOBAL'dir (tüm FE’lerde geçerlidir).</div>
@@ -160,7 +160,7 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
           <div className="flex flex-col gap-1.5">
               <label className="text-xs text-gray-500">Process function (seçili client type’a bağlı global liste)</label>
               <div className="flex gap-2 items-center">
-                  <select value={currentPfSelection} onChange={e => setLocalData(p => ({...p, selectedPFByType: {...(p.selectedPFByType||{}), [currentClientKey]: e.target.value}}))} className="flex-1 p-2 border border-gray-300 rounded-md bg-white" disabled={!currentClientKey}>
+                  <select value={currentPfSelection} onChange={e => setLocalData(p => ({...p, selectedPFByType: {...(p.selectedPFByType||{}), [currentClientKey]: e.target.value}}))} className="flex-1 min-w-0 p-2 border border-gray-300 rounded-md bg-white" disabled={!currentClientKey}>
                       <option value="">Seçiniz…</option>
                       {pfSecenekleri.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
@@ -169,15 +169,18 @@ export default function FailureEffectModal(props: FailureEffectModalProps) {
                     onChange={e => setNewPfName(e.target.value)} 
                     onKeyDown={handleNewPfKeyDown}
                     placeholder="Yeni process function" 
-                    className="flex-1 p-2 border border-gray-300 rounded-md" 
+                    className="flex-1 min-w-0 p-2 border border-gray-300 rounded-md" 
                     disabled={!currentClientKey}
                   />
               </div>
               <div className="text-xs text-gray-500">Buradaki PF’ler seçili tipe bağlıdır ve GLOBAL'dir (tüm FE’ler aynı listeyi görür).</div>
                <div className="flex flex-wrap items-center gap-2 mt-1.5 p-2 border rounded-md min-h-[38px] bg-gray-50">
-                  {currentPfList.length > 0 ? (
-                      currentPfList.map(name => <Pill key={name} text={name} onDelete={() => handleDeletePf(name)} />)
-                  ) : (
+                  {kaydaOzelPf && (
+                      <Pill key="__kayda_ozel" text={`${currentPfSelection}  · bu kayda özel`}
+                          onDelete={() => setLocalData(p => ({...p, selectedPFByType: {...(p.selectedPFByType||{}), [currentClientKey]: ''}}))} />
+                  )}
+                  {currentPfList.map(name => <Pill key={name} text={name} onDelete={() => handleDeletePf(name)} />)}
+                  {!currentPfList.length && !kaydaOzelPf && (
                       <span className="text-xs text-gray-500 flex items-center">
                           <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-300 text-white mr-2">-</span>
                           Bu tip için PF yok.
