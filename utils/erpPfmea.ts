@@ -11,6 +11,7 @@
 // izlenebilsin diye. Hata türleri/etkiler iskelet olarak açılır; ekip doldurur.
 
 import { initialApMatrix } from './ap-matrix';
+import { sorumlular } from './sorumlular';
 
 const SUPABASE_URL = 'https://nnubrxbpthmkitueixbh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5udWJyeGJwdGhta2l0dWVpeGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NjI2MDIsImV4cCI6MjA5NjEzODYwMn0.CHZUOylf_q8kkOQbFf9VWZ6-doUTlynmAhahM2EuImE';
@@ -103,7 +104,9 @@ export function hedefTarih(planTarihi: string, ap: string): string {
   t.setDate(t.getDate() + gun);
   return t.toISOString().slice(0, 10);
 }
-export interface Aksiyon { tur: 'prevention' | 'detection'; metin: string; }
+// acik: gercek bir eksigi kapatan is (acik gorev dogar). Bayraksizlar mevcut
+// uygulamayi belgeler ve Completed dogar.
+export interface Aksiyon { tur: 'prevention' | 'detection'; metin: string; acik?: boolean; }
 
 // Makine ayarina bagli karakteristikler (set degeri is emrinde sabitlenebilir)
 const AYAR = /AYAR|SET|ISI|SICAK|BASKI|HIZ|SURE|SÜRE|BASINC|BASIN\u00c7|DEGER|DE\u011eER/;
@@ -130,13 +133,13 @@ export function aksiyonlar(ap: string, it: any, girdiMi = false): Aksiyon[] {
     metin: `${k} hedef değeri${hd} istasyondaki görsel talimatta öne çıkarılır ve vardiya başı bilgilendirmede hatırlatılır` });
 
   // TESPİT — ölçümü kayda bağlar (D'yi düşürür)
-  if (!yontem) liste.push({ tur: 'detection',
+  if (!yontem) liste.push({ tur: 'detection', acik: true,
     metin: `${k} için ölçüm yöntemi ve numune büyüklüğü kontrol planında tanımlanır (şu an tanımlı değil)` });
   else liste.push({ tur: 'detection',
     metin: `İlk parça ve son parçada ${k}, ${yontem} ile ölçülüp kontrol formuna kaydedilir (${siklik(it, girdiMi)})` });
 
   // AP yüksekse ölçümü sınır kontrolüne bağla — ek yatırım gerektirmez
-  if (ap === 'H' && yontem) liste.push({ tur: 'detection',
+  if (ap === 'H' && yontem) liste.push({ tur: 'detection', acik: true,
     metin: `${yontem} ölçüm formuna alt/üst sınır${hd} basılır; sınır dışı değerde parça ayrılır ve ayar teyit edilmeden devam edilmez` });
 
   // Emniyet/mevzuat: AP düşük olsa da sürekliliği belgelenmeli
@@ -175,9 +178,18 @@ export interface HafizaKayit {
 }
 export type Hafiza = Record<string, HafizaKayit>;
 
-// Uretilen projeler data.otomatik ile isaretlenir; hafiza bunlari atlar.
-// Eski projelerde isaret remarks metnindeydi - geriye donuk guvence olarak kalir.
+// Uretilen projeler data.otomatik, uretilen nedenler otoUretim tasir; hafiza
+// bunlari atlar. Eski kayitlarda isaret remarks metnindeydi ya da hic yoktu -
+// o yuzden uretimin kendi aksiyon metinleri de imza olarak taninir.
 export const OTOMATIK = /^(OTOMATİK ÖNERİ|BENZER PROJEDEN)/;
+const URETIM_IZI = /Kabulde tedarikçi sertifikası\/irsaliyesinde|İlk parça ve son parçada .+ ile ölçülüp kontrol formuna|set değeri.{0,40}iş emri\/operasyon kartına yazılır|hedef değeri.{0,40}görsel talimatta öne çıkarılır|ölçüm formuna alt\/üst sınır|şu an tanımlı değil/;
+
+// Bu neden bu uretim tarafindan mi yazilmis?
+export function uretilmisMi(c: any): boolean {
+  if (c?.otoUretim) return true;
+  if (OTOMATIK.test(met(c?.remarks))) return true;
+  return (c?.actions || []).some((a: any) => URETIM_IZI.test(met(a?.description)));
+}
 
 // Turkce duyarli sadelestirme: eslesme "GRAMAJ" ile "gramaj (gr/m2)" arasinda da tutsun
 export function anahtarla(x: any): string {
@@ -215,7 +227,7 @@ export function hafizaKur(projeler: any[]): Hafiza {
       // Otomatik uretilmis nedenler hafizaya ALINMAZ: yoksa uretim kendi
       // ciktisindan ogrenir ve jenerik metin kendini besler (dongu).
       const ncs = (m.causeIds || []).map((c: string) => causes[c])
-        .filter(Boolean).filter((c: any) => !OTOMATIK.test(met(c.remarks)));
+        .filter(Boolean).filter((c: any) => !uretilmisMi(c));
       if (!ncs.length) return;
       // Daha zengin kayit (daha cok neden) tercih edilir
       const mevcut = h[k];
@@ -263,7 +275,11 @@ export function girdiSatirlari(kod: string, planlar: any[]): any[] {
   return g.length ? g : (girdiMalzemeMi(kod) ? planlar : []);
 }
 
-export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '') {
+export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '', sorumluListe: string[] = []) {
+  // Lokasyon disi sorumlu tasinmaz: kaynak projedeki ad bu lokasyonun
+  // listesinde yoksa bos birakilir (Ankara'daki ad Cerkezkoy'e gelmesin).
+  const sorumluSuz = (ad: string) => (sorumluListe.includes(ad) ? ad : '');
+  const tamamTarihi = planTarihi || new Date().toISOString().slice(0, 10);
   const fd: any = { failureModes: {}, processItems: {}, processSteps: {}, failureCauses: {}, failureEffects: {}, processItemIds: [], processStepFunctions: {} };
   let ns = 0, nf = 0, nm = 0, nc = 0, ne = 0;
 
@@ -369,7 +385,7 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
           const hRev = iyilestirme(S, Number(kn.occurrence) || O, Number(kn.detection) || D,
             (kn.actions || []).map((x: any) => ({ tur: x.type === 'detection' ? 'detection' : 'prevention', metin: '' })));
           fd.failureCauses[cid] = {
-            id: cid,
+            id: cid, otoUretim: true,
             // Onceki projeden gelen aksiyon zaten yapilmis bir istir (mevcut
             // uygulama); durumu, tarihi ve sorumlusu korunur - gorev listesinde
             // yeniden "acik is" olarak cikmasin.
@@ -378,7 +394,7 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
               status: met(ak.status) || 'Open', actionTaken: met(ak.actionTaken),
               description: met(ak.description),
               completionDate: met(ak.completionDate),
-              responsiblePerson: met(ak.responsiblePerson),
+              responsiblePerson: sorumluSuz(met(ak.responsiblePerson)),
               targetCompletionDate: met(ak.targetCompletionDate) || hedefTarih(planTarihi, ap),
             })),
             remarks: '',
@@ -404,12 +420,16 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
           const aks = aksiyonlar(ap, it, a.girdi);
           const rev = iyilestirme(S, O, D, aks);
           fd.failureCauses[cid] = {
-            id: cid,
+            id: cid, otoUretim: true,
+            // Mevcut uygulamayi belgeleyen aksiyonlar Completed dogar (is
+            // zaten yapiliyor); gercek eksikler (acik bayragi) acik gorev olur.
             actions: aks.map((x, i) => ({
               id: `${cid}_a${i + 1}`, type: x.tur, number: i + 1,
-              status: 'Open', actionTaken: '', description: x.metin,
-              completionDate: '', responsiblePerson: '',
-              targetCompletionDate: hedefTarih(planTarihi, ap),
+              status: x.acik ? 'Open' : 'Completed',
+              actionTaken: x.acik ? '' : 'Mevcut uygulama — kontrol planında tanımlı',
+              description: x.metin,
+              completionDate: x.acik ? '' : tamamTarihi, responsiblePerson: '',
+              targetCompletionDate: x.acik ? hedefTarih(planTarihi, ap) : tamamTarihi,
             })),
             remarks: '',
             detection: D, occurrence: O, description: aciklama, actionPriority: ap,
@@ -544,7 +564,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   // Mevcut projelerden ogren (hata turu, etki, siddet, nedenler, aksiyonlar)
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
-  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi);
+  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi, sorumlular('Çerkezköy'));
   // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
   const uyarlanan = Object.values<any>(fd.processStepFunctions)
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;

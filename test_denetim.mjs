@@ -103,6 +103,10 @@ v = tam(); v.failureCauses.c1.actionPriority = 'L';
 v.failureCauses.c1.actions = [{ description: 'X', responsiblePerson: '' }];
 assert.strictEqual(bul(v, 'sorumlu').length, 0,
   'AP=L de sorumlu sorulmaz — düşük öncelikte gürültü üretme');
+// Tamamlanmış aksiyon sorumlu beklemez (mevcut uygulamayı belgeleyenler)
+v = tam(); v.failureCauses.c1.actionPriority = 'H';
+v.failureCauses.c1.actions = [{ description: 'X', responsiblePerson: '', status: 'Completed' }];
+assert.strictEqual(bul(v, 'sorumlu').length, 0, 'tamamlanan işe sorumlu sorulmaz');
 
 // Girdi adımı hiç yoksa uyarı
 v = tam(); delete v.processSteps.s0;

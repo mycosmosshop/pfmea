@@ -17,17 +17,44 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
   // birakilir, ekip Excel'de doldurup takip eder. Suzgec uygulanmissa yalniz
   // gorunen satirlar aktarilir.
   const excelAktar = () => {
-    const ws = XLSX.utils.json_to_sheet(gorunen.map(b => ({
-      'Seviye': b.seviye === 'eksik' ? 'EKSİK' : 'UYARI',
-      'Konu': b.kural,
-      'Konum': b.konum,
-      'Bulgu': b.mesaj,
-      'Karar': '',        // Yapilacak / Gerekcelendirildi-kapatildi
-      'Sorumlu': '',
-      'Termin': '',
-      'Durum': 'Açık',
-    })));
-    ws['!cols'] = [{wch:8},{wch:12},{wch:50},{wch:70},{wch:26},{wch:16},{wch:12},{wch:10}];
+    const kenar = { style: 'thin', color: { rgb: 'B0B0B0' } };
+    const kenarlar = { top: kenar, bottom: kenar, left: kenar, right: kenar };
+    const antet = (v: string) => ({ v, t: 's', s: {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '1F4E9C' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: kenarlar,
+    } });
+    // EKSIK kirmizi, UYARI sari - ekrandaki renklerle ayni
+    const hucre = (v: any, eksik: boolean, ortala = false) => ({ v: v ?? '', t: 's', s: {
+      font: eksik ? { color: { rgb: 'B71C1C' }, bold: true } : { color: { rgb: '8A5A00' } },
+      fill: { fgColor: { rgb: eksik ? 'FDECEA' : 'FFF8E1' } },
+      alignment: { vertical: 'top', wrapText: true, ...(ortala ? { horizontal: 'center' } : {}) },
+      border: kenarlar,
+    } });
+    // Ekipce doldurulacak sutunlar beyaz kalir ki ayirt edilsin
+    const bos = () => ({ v: '', t: 's', s: { alignment: { vertical: 'top', wrapText: true }, border: kenarlar } });
+
+    const basliklar = ['No', 'Seviye', 'Konu', 'Konum', 'Bulgu', 'Karar (yapılacak / gerekçelendirildi)', 'Sorumlu', 'Termin', 'Durum'];
+    const aoa: any[][] = [basliklar.map(antet)];
+    gorunen.forEach((b, i) => {
+      const e = b.seviye === 'eksik';
+      aoa.push([
+        hucre(String(i + 1), e, true),
+        hucre(e ? 'EKSİK' : 'UYARI', e, true),
+        hucre(b.kural, e),
+        hucre(b.konum, e),
+        hucre(b.mesaj, e),
+        bos(), bos(), bos(),
+        { v: 'Açık', t: 's', s: { alignment: { horizontal: 'center' }, border: kenarlar } },
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:5},{wch:9},{wch:14},{wch:48},{wch:72},{wch:30},{wch:18},{wch:12},{wch:9}];
+    ws['!rows'] = [{ hpt: 28 }];
+    ws['!autofilter'] = { ref: `A1:I${gorunen.length + 1}` };
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Denetim');
     XLSX.writeFile(wb, 'Tamlik_Denetimi.xlsx');

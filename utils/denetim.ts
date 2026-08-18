@@ -119,8 +119,10 @@ export function denetle(data: FmeaData): Bulgu[] {
             seviye: 'uyari', kural: 'aksiyon', konum: cyol,
             mesaj: 'AP=M — aksiyon alınmalı ya da mevcut kontrollerin yeterliliği gerekçelendirilmeli.',
           });
-          // Aksiyonda sorumlu/termin (Adım 6)
-          acikAksiyon.forEach((a: any) => {
+          // Aksiyonda sorumlu/termin (Adım 6). Yalnız AÇIK aksiyonlarda sorulur:
+          // tamamlanmış iş (mevcut uygulamayı belgeleyen) sorumlu beklemez.
+          acikAksiyon.filter((a: any) => met(a.status).toLocaleLowerCase('tr') !== 'completed')
+            .forEach((a: any) => {
             if (ap !== 'L' && !met(a.responsiblePerson)) b.push({
               seviye: 'uyari', kural: 'sorumlu', konum: cyol,
               mesaj: `Aksiyonun sorumlusu atanmamış: "${met(a.description)}"`,

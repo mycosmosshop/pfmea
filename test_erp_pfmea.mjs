@@ -176,7 +176,7 @@ assert.strictEqual(K.hafizadaAra(hafiza, 'Yanma'), null,
 assert.strictEqual(K.hafizadaAra(hafiza, 'Kesim ölçüsü'), null, 'alakasız karakteristik eşleşmemeli');
 
 const fdH = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
-  [planSatir(1, 'Yanma Davranışı')], {}, 'kontrol planı', hafiza, '2026-03-10');
+  [planSatir(1, 'Yanma Davranışı')], {}, 'kontrol planı', hafiza, '2026-03-10', ['Ali']);
 const hf = Object.values(fdH.processStepFunctions)[0];
 const hm = fdH.failureModes[hf.failureModeIds[0]];
 assert.strictEqual(hm.description, 'Yanma hızı limit üstü', 'hata türü hafızadan gelmeli');
@@ -191,7 +191,12 @@ assert.strictEqual(hc.remarks, '', 'uyarlamada da remarks boş kalmalı');
 assert.strictEqual(hc.actions[0].description, 'Tedarikçiden her partide FR sertifikası istenmektedir.');
 assert.strictEqual(hc.actions[0].actionTaken, 'Mevcut sertifika kontrolü', 'yapılan iş metni korunmalı');
 // Önceki projede yapılmış iş, yeni projede yeniden "açık görev" olmamalı
-assert.strictEqual(hc.actions[0].responsiblePerson, 'Ali', 'sorumlu korunmalı');
+assert.strictEqual(hc.actions[0].responsiblePerson, 'Ali', 'lokasyon listesindeki sorumlu korunmalı');
+// Lokasyon dışı sorumlu taşınmamalı (Ankara'daki ad Çerkezköy projesine gelmesin)
+const fdBaska = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [planSatir(1, 'Yanma Davranışı')], {}, 'kontrol planı', hafiza, '2026-03-10', ['Veli']);
+assert.strictEqual(Object.values(fdBaska.failureCauses)[0].actions[0].responsiblePerson, '',
+  'lokasyon listesinde olmayan sorumlu temizlenmeli');
 assert.strictEqual(hc.actions[0].completionDate, '2026-01-01', 'tamamlanma tarihi korunmalı');
 assert.strictEqual(hc.actions[0].status, 'Completed');
 
@@ -294,7 +299,7 @@ const hafizaTamam = { 'gramaj': { kaynak: 'P', mode: 'm', effectText: 'e', sever
     description: 'Mevcut gorsel talimat', responsiblePerson: 'Mete',
     completionDate: '2026-03-16', targetCompletionDate: '2026-03-16' }] }] } };
 const fdT = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
-  [planSatir(1, 'Gramaj')], {}, 'kontrol plani', hafizaTamam, '2026-03-10');
+  [planSatir(1, 'Gramaj')], {}, 'kontrol plani', hafizaTamam, '2026-03-10', ['Mete']);
 const tAks = Object.values(fdT.failureCauses)[0].actions[0];
 assert.strictEqual(tAks.status, 'Completed', 'onceki projede yapilmis is acik gorev olarak gelmemeli');
 assert.strictEqual(tAks.completionDate, '2026-03-16');
@@ -438,6 +443,63 @@ const bc = Object.values(fdB.failureCauses)[0];
 assert.strictEqual(bc.revisedOccurrence, 3, 'bos kaynak degeri yerine hesaplanan kullanilmali');
 assert.strictEqual(bc.revisedDetection, 4);
 assert.ok(bc.revisedActionPriority, 'revize AP bos kalmamali');
+
+
+// ── Mevcut uygulamayı belgeleyen aksiyon TAMAM doğar, gerçek eksik AÇIK ──
+// (Task manager'da "zaten yapılıyor" işler açık görev olarak birikiyordu)
+const durumlari = (it, ap = 'L') => {
+  const fd = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+    [{ op_no: 1, ...it }], {}, 'kontrol planı', {}, '2026-03-10');
+  return Object.values(fd.failureCauses)[0].actions.map(a => ({ d: a.description, s: a.status, t: a.completionDate }));
+};
+// Yöntem tanımlı: her iki aksiyon da mevcut uygulama → Completed
+durumlari({ olculecek: 'Kesim', yontem: 'Kumpas', proses_kontrol: 'Talimat' }).forEach(a => {
+  assert.strictEqual(a.s, 'Completed', `mevcut uygulama açık görev olmamalı: ${a.d}`);
+  assert.ok(a.t, 'tamamlanan aksiyonda tamamlanma tarihi olmalı');
+});
+// Yöntem tanımsız: bu GERÇEK bir eksik → açık kalmalı
+const eksikli = durumlari({ olculecek: 'Etiket' });
+const acik = eksikli.filter(a => a.s === 'Open');
+assert.strictEqual(acik.length, 1, 'ölçüm yöntemi tanımsızlığı açık görev olmalı');
+assert.ok(acik[0].d.includes('kontrol planında tanımlanır'));
+assert.strictEqual(acik[0].t, '', 'açık görevde tamamlanma tarihi olmamalı');
+// AP=H sınır aksiyonu da gerçek bir iyileştirme → açık
+const yuksek = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
+  [{ op_no: 1, olculecek: 'Boy', yontem: 'Kumpas', son_kontrol: true }], {}, 'kontrol planı', {}, '2026-03-10');
+const hAks = Object.values(yuksek.failureCauses).flatMap(c => c.actions)
+  .filter(a => a.description.includes('alt/üst sınır'));
+if (hAks.length) assert.strictEqual(hAks[0].status, 'Open', 'AP=H iyileştirmesi açık görev olmalı');
+
+
+// -- Uretilmis neden taninmali: uc bagimsiz yol --
+// (remarks isareti kullanici istegiyle kaldirilinca dongu geri gelmisti)
+assert.strictEqual(K.uretilmisMi({ otoUretim: true }), true, 'gorunmez isaret');
+assert.strictEqual(K.uretilmisMi({ remarks: 'OTOMATIK ONERI - x' }), false, 'yanlis yazim eslesmemeli');
+assert.strictEqual(K.uretilmisMi({ remarks: 'OTOMATİK ÖNERİ — x' }), true, 'eski remarks isareti');
+assert.strictEqual(K.uretilmisMi({ actions: [{ description:
+  'Kabulde tedarikçi sertifikası/irsaliyesinde En değeri teyit edilir' }] }), true,
+  'metin imzasi: bayraksiz eski kayit');
+assert.strictEqual(K.uretilmisMi({ actions: [{ description:
+  'İlk parça ve son parçada Boy, Kumpas ile ölçülüp kontrol formuna kaydedilir' }] }), true);
+assert.strictEqual(K.uretilmisMi({ description: 'Karışım oranı',
+  remarks: 'Ekip toplantısında belirlendi',
+  actions: [{ description: 'Tedarikçiden her partide FR sertifikasi istenmektedir.' }] }), false,
+  'insan yazimi neden uretilmis sayilmamali');
+
+// Hafiza: bu uc yolun her biri kaydi disarida birakmali
+const projeIle = (neden) => ({ name: 'P', data: { fmeaData: {
+  processStepFunctions: { f1: { productCharacteristic: 'Gramaj', failureModeIds: ['m1'] } },
+  failureModes: { m1: { description: 'x', effectIds: ['e1'], causeIds: ['c1'] } },
+  failureEffects: { e1: { effectText: 'e', severity: 7 } },
+  failureCauses: { c1: { description: 'n', occurrence: 4, detection: 5, actions: [], ...neden } },
+} } });
+assert.strictEqual(Object.keys(K.hafizaKur([projeIle({ otoUretim: true })])).length, 0,
+  'otoUretim tasiyan neden hafizaya girmemeli');
+assert.strictEqual(Object.keys(K.hafizaKur([projeIle({ actions: [{ description:
+  'İlk parça ve son parçada Boy, Kumpas ile ölçülüp kontrol formuna kaydedilir' }] })])).length, 0,
+  'kendi aksiyon metnimizi tasiyan neden hafizaya girmemeli');
+assert.strictEqual(Object.keys(K.hafizaKur([projeIle({})])).length, 1,
+  'insan yazimi neden hafizaya girmeli');
 
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');
