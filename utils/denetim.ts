@@ -101,7 +101,7 @@ export function denetle(data: FmeaData): Bulgu[] {
         });
 
         ncs.forEach((c: any) => {
-          const cyol = `${yol} › ${met(c.description).slice(0, 40)}`;
+          const cyol = `${yol} › ${met(c.description)}`;
           if (!met(c.preventionControl)) b.push({ seviye: 'eksik', kural: 'önleme', konum: cyol, mesaj: 'Mevcut önleme kontrolü boş (Adım 5) — hiç önlem yoksa "yok" yazılmalı.' });
           if (!met(c.detectionControl)) b.push({ seviye: 'eksik', kural: 'tespit', konum: cyol, mesaj: 'Mevcut tespit kontrolü boş (Adım 5).' });
           const O = Number(c.occurrence), D = Number(c.detection);
@@ -123,7 +123,7 @@ export function denetle(data: FmeaData): Bulgu[] {
           acikAksiyon.forEach((a: any) => {
             if (ap !== 'L' && !met(a.responsiblePerson)) b.push({
               seviye: 'uyari', kural: 'sorumlu', konum: cyol,
-              mesaj: `Aksiyonun sorumlusu atanmamış: "${met(a.description).slice(0, 50)}"`,
+              mesaj: `Aksiyonun sorumlusu atanmamış: "${met(a.description)}"`,
             });
           });
         });

@@ -47,7 +47,7 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
         </div>
 
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="sticky top-0 bg-gray-100">
               <tr>
                 <th className="text-left px-4 py-2 w-16 font-semibold text-gray-600">Seviye</th>
@@ -65,8 +65,8 @@ export const DenetimModal: React.FC<{ allData: FmeaData; onClose: () => void }> 
                     </span>
                   </td>
                   <td className="px-4 py-2 align-top text-xs text-gray-500">{b.kural}</td>
-                  <td className="px-4 py-2 align-top text-gray-700">{b.konum}</td>
-                  <td className="px-4 py-2 align-top text-gray-800">{b.mesaj}</td>
+                  <td className="px-4 py-2 align-top text-gray-700 break-words">{b.konum}</td>
+                  <td className="px-4 py-2 align-top text-gray-800 break-words">{b.mesaj}</td>
                 </tr>
               ))}
             </tbody>
