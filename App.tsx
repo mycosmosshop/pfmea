@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction, HistoryEntry } from './types';
+import { erpdenUret, erpUrunListesi } from './utils/erpPfmea';
 import { diffFmea } from './utils/fmeaDiff';
 import FmeaTreeView from './components/FmeaTreeView';
 import FmeaTable from './components/FmeaTable';
@@ -480,6 +481,52 @@ const App: React.FC = () => {
     };
     initializeApp();
   }, []);
+
+  // ── ERP'den PFMEA üret ──────────────────────────────────────────────────
+  // Ürün ağacı + operasyon kartı + kontrol planından iskelet üretir; S/O/D,
+  // mevcut kontroller ve aksiyonlar kurallarla doldurulur (her nedenin
+  // remarks alanında kaynağı yazılıdır — denetimde izlenebilir olsun diye).
+  const [erpAcik, setErpAcik] = React.useState(false);
+  const [erpListe, setErpListe] = React.useState<{kod:string;ad:string}[]>([]);
+  const [erpKod, setErpKod] = React.useState('');
+  const [erpDurum, setErpDurum] = React.useState('');
+  const [erpMesgul, setErpMesgul] = React.useState(false);
+
+  const erpAc = async () => {
+    setErpAcik(true); setErpDurum('Ürün listesi okunuyor…');
+    try { setErpListe(await erpUrunListesi()); setErpDurum(''); }
+    catch (e:any) { setErpDurum('Ürün listesi okunamadı: ' + (e?.message || e)); }
+  };
+  const erpUret = async () => {
+    const kod = erpKod.trim();
+    if (!kod) { setErpDurum('Önce bir ürün kodu seçin.'); return; }
+    setErpMesgul(true); setErpDurum('ERP verisi okunuyor ve PFMEA üretiliyor…');
+    try {
+      const s = await erpdenUret(kod);
+      const yeni = createNewProjectState();
+      yeni.fmeaData = s.fmeaData;
+      yeni.projectData = {
+        ...yeni.projectData,
+        fmea: { ...(yeni.projectData as any).fmea, project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})` },
+        cp: { ...((yeni.projectData as any).cp || {}),
+              notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
+      } as any;
+      await saveProject(yeni);
+      setErpMesgul(false); setErpAcik(false);
+      setCurrentProjectId(yeni.id);
+      setData(yeni.fmeaData);
+      setRegistryData(yeni.registryData);
+      setProjectData(yeni.projectData);
+      setAppView('editor');
+      setLeftView('project');
+      alert(`PFMEA üretildi\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
+        + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
+        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}`
+        + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : ''));
+    } catch (e:any) {
+      setErpMesgul(false); setErpDurum('Hata: ' + (e?.message || e));
+    }
+  };
 
   const handleNewProject = () => {
     const newProject = createNewProjectState();
@@ -1750,11 +1797,47 @@ const App: React.FC = () => {
   if (appView === 'dashboard') {
     return (
       <div className="min-h-screen bg-gray-100 font-sans text-gray-800 p-8">
+        {erpAcik && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => !erpMesgul && setErpAcik(false)}>
+            <div className="bg-white rounded-lg shadow-xl p-6 w-[560px] max-w-[94vw]" onClick={e => e.stopPropagation()}>
+              <h2 className="text-xl font-bold text-blue-700 mb-1">ERP'den PFMEA Üret</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Ürün ağacı (hammaddeler), operasyon kartı (rota) ve kontrol planı okunur; proses adımları,
+                karakteristikler, hata türleri ve S/O/D + AP + aksiyonlar üretilir.
+                Üretilen değerler <b>öneridir</b>; her nedenin notunda kaynağı yazılıdır.
+              </p>
+              <label className="block text-sm font-semibold mb-1">Ürün kodu</label>
+              <input list="erpUrunler" value={erpKod} onChange={e => setErpKod(e.target.value)}
+                placeholder="örn. 205.0.214-C" disabled={erpMesgul}
+                className="w-full border border-gray-300 rounded px-3 py-2 mb-1" />
+              <datalist id="erpUrunler">
+                {erpListe.map(u => <option key={u.kod} value={u.kod}>{u.ad}</option>)}
+              </datalist>
+              <div className="text-xs text-gray-500 mb-3">{erpListe.length ? `${erpListe.length} üründe kontrol planı var` : ''}</div>
+              {erpDurum && <div className="text-sm mb-3 text-gray-700">{erpDurum}</div>}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setErpAcik(false)} disabled={erpMesgul}
+                  className="px-4 py-2 text-sm rounded-md bg-gray-200 hover:bg-gray-300">Kapat</button>
+                <button onClick={erpUret} disabled={erpMesgul}
+                  className="px-4 py-2 text-sm font-semibold rounded-md text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-60">
+                  {erpMesgul ? 'Üretiliyor…' : 'Üret'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <header className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-blue-700">FMEA Project Dashboard</h1>
             <div className="flex space-x-4">
                 <button onClick={handleNewProject} className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-blue-600 hover:bg-blue-700 shadow-md">
                   New Project
+                </button>
+                <button
+                  onClick={erpAc}
+                  title="Ürün ağacı + operasyon kartı + kontrol planından PFMEA üretir"
+                  className="px-5 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-amber-600 hover:bg-amber-700 shadow-md"
+                >
+                  ERP'den Üret
                 </button>
                 <button 
                   onClick={handleImportClick}
