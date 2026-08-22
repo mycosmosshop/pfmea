@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction, HistoryEntry } from './types';
-import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari } from './utils/erpPfmea';
+import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari, mevcutProje } from './utils/erpPfmea';
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
 import FmeaTreeView from './components/FmeaTreeView';
@@ -495,6 +495,7 @@ const App: React.FC = () => {
   const [erpDurum, setErpDurum] = React.useState('');
   const [erpMesgul, setErpMesgul] = React.useState(false);
   const [menuAcik, setMenuAcik] = React.useState(false);
+  const [erpTekrar, setErpTekrar] = React.useState(false);   // var olani yeniden uret
 
   const erpAc = async () => {
     setMenuAcik(false); setErpAcik(true); setErpDurum('Ürün listesi okunuyor…');
@@ -540,8 +541,18 @@ const App: React.FC = () => {
   };
 
   const erpUret = async () => {
-    const kodlar = erpKodlari(erpKod);
-    if (!kodlar.length) { setErpDurum('Önce bir ürün kodu girin.'); return; }
+    const girilen = erpKodlari(erpKod);
+    if (!girilen.length) { setErpDurum('Önce bir ürün kodu girin.'); return; }
+
+    // PFMEA'si olan ürün varsayılan olarak atlanır: ekibin üzerinde çalıştığı
+    // kayıt yanlışlıkla ikizlenmesin. Kutucuk işaretliyse yeni kopya üretilir.
+    const atlanan = erpTekrar ? [] : girilen.filter(k => mevcutProje(projects, k));
+    const kodlar = girilen.filter(k => !atlanan.includes(k));
+    if (!kodlar.length) {
+      setErpDurum(`Bu ürünlerin PFMEA'sı zaten var: ${atlanan.join(', ')}\n`
+        + `Yeniden üretmek için aşağıdaki kutucuğu işaretleyin (ayrı bir kopya oluşur).`);
+      return;
+    }
     setErpMesgul(true);
 
     const basarili: { kod: string; s: any; tarih: string; yeni: any }[] = [];
@@ -572,7 +583,7 @@ const App: React.FC = () => {
     }
     setErpAcik(false); setErpDurum('');
 
-    if (basarili.length === 1 && !hatali.length) {
+    if (basarili.length === 1 && !hatali.length && !atlanan.length) {
       // Tek ürün: eskisi gibi doğrudan editöre geç
       const { kod, s, tarih, yeni } = basarili[0];
       setCurrentProjectId(yeni.id);
@@ -597,8 +608,9 @@ const App: React.FC = () => {
       + (b.s.ozet.planiOlmayan ? `  (${b.s.ozet.planiOlmayan} hammaddede girdi planı yok)` : '')
       + (b.s.ozet.opKartiYok ? '  (operasyon kartı yok — adımlar plandan)' : ''));
     const hataSatir = hatali.map(h => `✗ ${h.kod} — ${h.hata}`);
-    alert(`${basarili.length}/${kodlar.length} PFMEA üretildi\n\n`
+    alert(`${basarili.length}/${girilen.length} PFMEA üretildi\n\n`
       + satir.join('\n')
+      + (atlanan.length ? `\n\nAtlanan (PFMEA'ı zaten var):\n${atlanan.map(k => `– ${k}`).join('\n')}` : '')
       + (hataSatir.length ? `\n\nÜretilemeyen:\n${hataSatir.join('\n')}` : '')
       + `\n\nProjeler panoda listelendi; açmak için satıra tıklayın.`);
   };
@@ -1900,10 +1912,25 @@ const App: React.FC = () => {
                 {erpListe.map(u => <option key={u.kod} value={u.kod}>{u.ad}</option>)}
               </datalist>
               <div className="text-xs text-gray-500 mb-3">
-                {erpKodlari(erpKod).length > 1
-                  ? `${erpKodlari(erpKod).length} ürün — her biri için ayrı PFMEA üretilir, sırayla`
-                  : (erpListe.length ? `${erpListe.length} üründe kontrol planı var` : '')}
+                {(() => {
+                  const k = erpKodlari(erpKod);
+                  const var_ = k.filter(x => mevcutProje(projects, x));
+                  if (var_.length) return `${var_.length} ürünün PFMEA'sı zaten var: ${var_.join(', ')}`;
+                  if (k.length > 1) return `${k.length} ürün — her biri için ayrı PFMEA üretilir, sırayla`;
+                  return erpListe.length ? `${erpListe.length} üründe kontrol planı var` : '';
+                })()}
               </div>
+              <label className="flex items-start gap-2 text-xs text-gray-600 mb-3 cursor-pointer">
+                <input type="checkbox" checked={erpTekrar} onChange={e => setErpTekrar(e.target.checked)}
+                  disabled={erpMesgul} className="mt-0.5" />
+                <span>
+                  PFMEA'sı olan ürünleri de yeniden üret
+                  <span className="block text-gray-500">
+                    İşaretli değilse zaten PFMEA'sı olan ürünler atlanır; işaretlerseniz
+                    <b> ayrı bir kopya</b> oluşur, mevcut kayıt değişmez.
+                  </span>
+                </span>
+              </label>
               {erpDurum && <div className="text-sm mb-3 text-gray-700 whitespace-pre-line max-h-40 overflow-auto">{erpDurum}</div>}
               <div className="flex justify-end gap-2">
                 <button onClick={() => setErpAcik(false)} disabled={erpMesgul}

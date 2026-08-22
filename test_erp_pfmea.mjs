@@ -531,5 +531,33 @@ assert.deepStrictEqual(K.kodListesi(null), []);
 assert.deepStrictEqual(K.kodListesi('9MM.4.648, 944.4.KFR30-065-1'),
   ['9MM.4.648', '944.4.KFR30-065-1'], 'nokta, harf ve tire bozulmamalı');
 
+
+// ── PFMEA'sı olan ürün yeniden üretilmesin ──
+const kayit = (projectId, project) => ({ projectData: { fmea: { projectId, project } } });
+const PROJELER = [
+  kayit('proj_203_0_414', '203.0.414 PFMEA'),
+  kayit('proj_203_0_414_A', '203.0.414-A PFMEA'),
+  kayit('205_0_133', '205.0.133 PFMEA'),          // eski biçim: proj_ öneki yok
+  kayit('proj_6FA881989', '6FA 881 989 PFMEA'),
+  kayit('proj_227_0_132', 'Mercedes kapi sungeri 2026'),   // ekip yeniden adlandirmis
+];
+assert.strictEqual(K.projeKimligi('203.0.414'), 'proj_203_0_414');
+assert.strictEqual(K.projeKimligi('944.4.KFR30-065-1'), 'proj_944_4_KFR30_065_1', 'tire de alt çizgi olur');
+
+assert.ok(K.mevcutProje(PROJELER, '203.0.414'), 'kimlikten yakalanmalı');
+assert.ok(K.mevcutProje(PROJELER, '205.0.133'), 'eski biçimli kayıt ad üzerinden yakalanmalı');
+assert.ok(K.mevcutProje(PROJELER, '6FA 881 989'), 'boşluklu kod ad üzerinden yakalanmalı');
+assert.ok(K.mevcutProje(PROJELER, '227.0.132'),
+  'proje yeniden adlandirilmis olsa da kimlikten yakalanmali');
+assert.strictEqual(K.mevcutProje(PROJELER, '999.0.999'), null, 'olmayan ürün null');
+assert.strictEqual(K.mevcutProje(PROJELER, ''), null);
+assert.strictEqual(K.mevcutProje([], '203.0.414'), null);
+
+// Farklı ürünler karışmamalı: 203.0.414-A ayrı bir üründür
+const a = K.mevcutProje(PROJELER, '203.0.414-A');
+assert.ok(a && a.projectData.fmea.projectId === 'proj_203_0_414_A',
+  '203.0.414 ile 203.0.414-A birbirine karışmamalı');
+assert.notStrictEqual(K.mevcutProje(PROJELER, '203.0.414'), a);
+
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');

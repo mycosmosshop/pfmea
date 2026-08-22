@@ -600,3 +600,20 @@ export async function erpUrunListesi(): Promise<{ kod: string; ad: string }[]> {
   d.forEach(x => { if (x.stok_kodu && !m.has(x.stok_kodu)) m.set(x.stok_kodu, met(x.stok_adi)); });
   return [...m.entries()].map(([kod, ad]) => ({ kod, ad })).sort((a, b) => a.kod.localeCompare(b.kod, 'tr'));
 }
+
+// Bir ürün kodunun PFMEA'sı zaten var mı? Proje kimliği (proj_<kod>) ve proje
+// adı ("<kod> PFMEA") üzerinden bakılır; ERP üretimi ikisini de bu biçimde
+// yazar, elle açılmış projelerde ad eşleşmesi yakalar.
+export function projeKimligi(kod: any): string {
+  return `proj_${met(kod).replace(/[.\-]/g, '_')}`;
+}
+export function mevcutProje(projeler: any[], kod: any): any | null {
+  const k = met(kod);
+  if (!k) return null;
+  const kimlik = projeKimligi(k);
+  const ad = buyuk(`${k} PFMEA`);
+  return projeler.find(p => {
+    const f = p?.projectData?.fmea || {};
+    return met(f.projectId) === kimlik || buyuk(f.project) === ad;
+  }) || null;
+}
