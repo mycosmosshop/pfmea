@@ -41,8 +41,16 @@ assert.strictEqual(K.tespit({ olculecek: 'Yanma hızı', yontem: 'Kumpas' }),
                    K.tespit({ olculecek: 'Kesim', yontem: 'Kumpas' }), 'emniyet D’yi değiştirmemeli');
 
 // ── O ve D kuralları ──
-assert.strictEqual(K.olasilik({ proses_kontrol: 'SPC' }), 3);
-assert.strictEqual(K.olasilik({}), 5);
+assert.strictEqual(K.olasilik({ proses_kontrol: 'SPC' }), 3, 'aciklamali onleme kontrolu');
+assert.strictEqual(K.olasilik({}), 5, 'tanimli onleme yok');
+// LeanSys bu alani cogu satirda 1/0 BAYRAGI olarak dolduruyor: kontrolun
+// varligini soyler, gucunu soylemez -> orta duzey (4). "0" ise hic yok (5).
+assert.strictEqual(K.olasilik({ proses_kontrol: 1 }), 4, 'bayrak: guc bilgisi yok');
+assert.strictEqual(K.olasilik({ proses_kontrol: '1' }), 4);
+assert.strictEqual(K.olasilik({ proses_kontrol: 0 }), 5, '0 = onleme kontrolu yok');
+assert.strictEqual(K.olasilik({ proses_kontrol: '0' }), 5);
+// Yanma testi: S9 (mevzuat) + O4 (bayrak) + D5 (TL206) -> AP=H
+assert.strictEqual(K.apHesapla(9, 4, 5), 'H', 'emniyet satiri oncelikli cikmali');
 assert.strictEqual(K.tespit({ yontem: '%100 otomatik kamera' }), 2);
 assert.strictEqual(K.tespit({ yontem: 'Kumpas' }), 4);
 assert.strictEqual(K.tespit({ yontem: 'Gözle' }), 7);
@@ -53,8 +61,13 @@ assert.strictEqual(K.tespit({ yontem: 'Kumpas', ornekleme_sikligi: 'Vardiyada 1'
 // ── Mevcut kontroller kontrol planından ──
 assert.strictEqual(K.onlemeKontrol({ proses_kontrol: 'Parametre takibi' }), 'Parametre takibi');
 assert.ok(K.onlemeKontrol({}).includes('FR17'));
+// Mevcut tespit kontrolu: yöntem + nerede tanımlı. Numune/sıklık kontrol
+// planının kendi sütunlarında durur, FMEA metninde TEKRAR EDILMEZ.
 assert.strictEqual(K.tespitKontrol({ yontem: 'Kumpas', ornekleme_buyuklugu: 5, ornekleme_sikligi: 'Her lot' }),
-  'Kumpas · 5 adet · Her lot');
+  'Kumpas ile proses içi kontrol (kontrol planında tanımlı)');
+assert.ok(!/adet|Her lot|\d+ dk/.test(
+  K.tespitKontrol({ yontem: 'Gözle', ornekleme_buyuklugu: 1, ornekleme_sikligi: 60 }, true)),
+  'numune ve sıklık metne girmemeli');
 const metinler = (...a) => K.aksiyonlar(...a).map(x => x.metin).join(' | ');
 assert.ok(metinler('L', { olculecek: 'Yanma hızı' }).includes('sertifika'),
   'emniyette AP düşük olsa da süreklilik aksiyonu');
@@ -201,10 +214,42 @@ assert.strictEqual(hc.actions[0].completionDate, '2026-01-01', 'tamamlanma tarih
 assert.strictEqual(hc.actions[0].status, 'Completed');
 
 // ── Hedef tarih kontrol planı tarihinden ──
-assert.strictEqual(K.hedefTarih('', 'H').length, 10, 'plan tarihi yoksa bugünden');
-assert.strictEqual(K.hedefTarih('2026-03-10', 'H'), '2026-04-09', 'AP=H → 30 gün');
-assert.strictEqual(K.hedefTarih('2026-03-10', 'M'), '2026-05-09', 'AP=M → 60 gün');
-assert.strictEqual(K.hedefTarih('2026-03-10', 'L'), '2026-06-08', 'AP=L → 90 gün');
+// Termin: AP'ye göre 30/60/90 gün. Plan tarihi GEÇMİŞTE ise termin bugünden
+// hesaplanır — geçmişe düşen termin anlamsız (planda 1988 yazan ürünlerde
+// 68 aksiyonun termini 1988'e düşmüştü).
+const gunSonra = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+assert.strictEqual(K.hedefTarih('', 'H'), gunSonra(30), 'plan tarihi yoksa bugünden');
+assert.strictEqual(K.hedefTarih('2026-03-10', 'H'), gunSonra(30), 'geçmiş plan tarihi termini geriye çekmemeli');
+assert.strictEqual(K.hedefTarih('1988-05-04', 'M'), gunSonra(60));
+assert.strictEqual(K.hedefTarih('', 'L'), gunSonra(90), 'AP=L → 90 gün');
+// Gelecek tarihli (planlanmış) revizyonda plan tarihine bağlanır
+const ileri = gunSonra(200);
+assert.ok(K.hedefTarih(ileri, 'H') > ileri, 'gelecek plan tarihi esas alınır');
+
+// ── Plan tarihi güvenilirliği ──
+// LeanSys'te tr_revtarih elle yazılıyor; 213.0.147'de 1988-05-04 gelmişti.
+const bugun = new Date('2026-08-19T00:00:00Z');
+assert.strictEqual(K.planTarihiGecerliMi('2026-04-23', bugun), true);
+assert.strictEqual(K.planTarihiGecerliMi('2026-08-19', bugun), true, 'bugün geçerli');
+assert.strictEqual(K.planTarihiGecerliMi('1988-05-04', bugun), false, '38 yıllık tarih güvenilmez');
+assert.strictEqual(K.planTarihiGecerliMi('2004-06-07', bugun), false, '22 yıllık tarih güvenilmez');
+assert.strictEqual(K.planTarihiGecerliMi('2026-12-31', bugun), false, 'gelecek tarih kabul edilmez');
+assert.strictEqual(K.planTarihiGecerliMi('2016-08-19', bugun), true, 'sınırda (10 yıl) geçerli');
+assert.strictEqual(K.planTarihiGecerliMi('2016-08-18', bugun), false, 'sınırın bir gün dışı');
+assert.strictEqual(K.planTarihiGecerliMi('', bugun), false);
+assert.strictEqual(K.planTarihiGecerliMi(null, bugun), false);
+assert.strictEqual(K.planTarihiGecerliMi('07.06.2004', bugun), false, 'biçimsiz değer');
+assert.strictEqual(K.planTarihiGecerliMi('2026-13-45', bugun), false, 'geçersiz takvim günü');
+
+// Plandan tarih seçimi: en güncel satır, sonra güvenilirlik süzgeci
+const sec = (tarihler) => K.planTarihiSec(tarihler.map(t => ({ tr_revtarih: t })), bugun);
+assert.deepStrictEqual(sec(['2026-01-10', '2026-04-23', '2025-12-01']),
+  { tarih: '2026-04-23', ham: '2026-04-23', guvenilmez: false }, 'en güncel revizyon');
+assert.deepStrictEqual(sec(['1988-05-04']),
+  { tarih: '', ham: '1988-05-04', guvenilmez: true }, 'güvenilmez tarih KULLANILMAZ ama ham değer bildirilir');
+assert.deepStrictEqual(sec([]), { tarih: '', ham: '', guvenilmez: false }, 'tarih yoksa uyarı da yok');
+assert.deepStrictEqual(sec([null, '']), { tarih: '', ham: '', guvenilmez: false });
+assert.deepStrictEqual(K.planTarihiSec(null, bugun), { tarih: '', ham: '', guvenilmez: false });
 assert.strictEqual(hc.actions[0].targetCompletionDate, '2026-01-01', 'kaynaktaki hedef tarih korunmalı');
 
 // Hafızada karşılığı olmayan karakteristik kurallara düşmeli
@@ -256,9 +301,7 @@ assert.strictEqual(K.siklik({ ornekleme_sikligi: 60 }, false), '60 dk');
 assert.strictEqual(K.siklik({ ornekleme_sikligi: 'Her vardiya' }, false), 'Her vardiya', 'metin korunmalı');
 assert.strictEqual(K.siklik({}, true), 'Her lot');
 assert.strictEqual(K.tespitKontrol({ yontem: 'TL 07', ornekleme_buyuklugu: 1, ornekleme_sikligi: 60 }, true),
-  'TL 07 · 1 adet · Her lot');
-assert.strictEqual(K.tespitKontrol({ yontem: 'TL 07', ornekleme_buyuklugu: 0, ornekleme_sikligi: 60 }, false),
-  'TL 07 · 60 dk', 'örnek büyüklüğü 0 ise yazılmamalı');
+  'TL 07 ile girdi kalite kontrolü (kontrol planında tanımlı)', 'girdi/proses ayrımı metinde');
 
 const fdLot = K.iskeletUret({ kod: 'X', ad: 'X' }, [{ tuketim_kodu: '909.4.018', tuketim_adi: 'A' }], [], [],
   { '909.4.018': [{ olculecek: 'Kalınlık', yontem: 'Mikrometre', ornekleme_sikligi: 60, giris: 1 }] },
@@ -266,8 +309,15 @@ const fdLot = K.iskeletUret({ kod: 'X', ad: 'X' }, [{ tuketim_kodu: '909.4.018',
 const lf = Object.values(fdLot.processStepFunctions)[0];
 assert.strictEqual(lf.sampleFrequency, 'Her lot', 'girdi adımında sıklık Her lot olmalı');
 const lc = Object.values(fdLot.failureCauses)[0];
-assert.ok(lc.detectionControl.includes('Her lot') && !lc.detectionControl.includes('60'),
-  'girdi tespit kontrolünde 60 dk yazmamalı');
+assert.strictEqual(lc.detectionControl, 'Mikrometre ile girdi kalite kontrolü (kontrol planında tanımlı)');
+assert.ok(!/adet|Her lot|60/.test(lc.detectionControl), 'numune/sıklık metne girmemeli');
+// Aynı bilgi kontrol planı sütununda duruyor — tek yerde, tezat yok
+assert.strictEqual(lf.sampleFrequency, 'Her lot');
+// Aksiyon metni de sayı tekrar etmemeli, plana atıf yapmalı
+const lAks = Object.values(fdLot.failureCauses)[0].actions.find(a => a.type === 'detection');
+assert.ok(lAks.description.includes('kontrol planındaki numune ve sıklığa göre'),
+  'tespit aksiyonu plana atıf yapmalı');
+assert.ok(!/\d+ adet|60 dk/.test(lAks.description), 'aksiyon metninde numune/sıklık sayısı olmamalı');
 
 
 // -- Akis semasinda adim basina TEK satir --

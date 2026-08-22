@@ -596,7 +596,8 @@ const App: React.FC = () => {
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
         + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
         + `Benzer projelerden uyarlanan karakteristik: ${s.ozet.uyarlanan}\n`
-        + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)' : ' (planda tarih yok — bugün)'}`
+        + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)'
+            : (s.tarihGuvenilmez ? ` (planda ${s.planTarihiHam} yazıyor — güvenilmez, bugün alındı)` : ' (planda tarih yok — bugün)')}`
         + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : '')
         + (s.ozet.opKartiYok ? `\n\nUYARI: Operasyon kartı ERP'de yok (LeanSys'ten de gelmedi) — proses adımları kontrol planındaki op numaralarından kuruldu; makine adlarını kontrol edin.` : ''));
       return;
@@ -606,7 +607,8 @@ const App: React.FC = () => {
     const satir = basarili.map(b =>
       `✓ ${b.kod} — ${b.s.ozet.adim} adım, ${b.s.ozet.karakteristik} karakteristik, ${b.s.ozet.neden} neden`
       + (b.s.ozet.planiOlmayan ? `  (${b.s.ozet.planiOlmayan} hammaddede girdi planı yok)` : '')
-      + (b.s.ozet.opKartiYok ? '  (operasyon kartı yok — adımlar plandan)' : ''));
+      + (b.s.ozet.opKartiYok ? '  (operasyon kartı yok — adımlar plandan)' : '')
+      + (b.s.tarihGuvenilmez ? `  (plan tarihi ${b.s.planTarihiHam} güvenilmez — bugün alındı)` : ''));
     const hataSatir = hatali.map(h => `✗ ${h.kod} — ${h.hata}`);
     alert(`${basarili.length}/${girilen.length} PFMEA üretildi\n\n`
       + satir.join('\n')

@@ -58,8 +58,12 @@ export function siddet(it: any, girdiMi: boolean): number {
 }
 // ── Olasılık: önleyici kontrolün varlığından ──────────────────────────────
 export function olasilik(it: any): number {
-  let o = met(it.proses_kontrol) ? 3 : 5;
-  return Math.min(10, Math.max(1, o));
+  const p = metinS(it.proses_kontrol);          // "0" bos sayilir
+  if (!p) return 5;                             // tanimli onleyici kontrol yok
+  // LeanSys'te bu alan cogu satirda yalniz 1/0 BAYRAGI: kontrolun var oldugunu
+  // soyler, GUCU hakkinda bilgi vermez -> orta duzey. Aciklama yazilmissa
+  // (SPC, proses talimati...) onleme daha guvenilir sayilir.
+  return /^[0-9]+$/.test(p) ? 4 : 3;
 }
 // ── Tespit: ölçüm yöntemi ve örnekleme sıklığından ────────────────────────
 export function tespit(it: any): number {
@@ -89,20 +93,49 @@ export function siklik(it: any, girdiMi: boolean): string {
   const t = metinS(it.ornekleme_sikligi);
   return /^\d+$/.test(t) ? `${t} dk` : t;
 }
+// Mevcut tespit kontrolu: YONTEM + nerede tanimli oldugu. Numune buyuklugu ve
+// siklik kontrol planinin kendi sutunlari (Sample Size / Sample Frequency);
+// FMEA metnine de yazilirsa plan revize oldugunda iki yerde farkli bilgi kalir.
 export function tespitKontrol(it: any, girdiMi = false): string {
-  const p = [metinS(it.yontem) || 'Tanımlı ölçüm yöntemi yok'];
-  if (metinS(it.ornekleme_buyuklugu)) p.push(met(it.ornekleme_buyuklugu) + ' adet');
-  const sk = siklik(it, girdiMi);
-  if (sk) p.push(sk);
-  return p.join(' · ');
+  const y = metinS(it.yontem);
+  if (!y) return 'Tanımlı ölçüm yöntemi yok';
+  return `${y} ile ${girdiMi ? 'girdi kalite kontrolü' : 'proses içi kontrol'} (kontrol planında tanımlı)`;
 }
-// Aksiyon hedef tarihi kontrol plani revizyon tarihinden turetilir; yuksek AP
-// daha kisa vadeli olur.
+// Kontrol planinin revizyon tarihi LeanSys'te elle yazilan bir alan; sahada
+// 1988-05-04 gibi acikca hatali degerler var. Gelecege donuk ya da bu kadar
+// eski bir tarih FMEA'yi demirlemek icin kullanilmaz.
+export const PLAN_TARIHI_AZAMI_YIL = 10;
+export function planTarihiGecerliMi(tarih: any, bugun: Date = new Date()): boolean {
+  const t = met(tarih).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+  const d = Date.parse(t + 'T00:00:00Z');
+  if (isNaN(d)) return false;
+  const b = Date.parse(bugun.toISOString().slice(0, 10) + 'T00:00:00Z');
+  if (d > b) return false;                                   // gelecek tarih
+  const enEski = new Date(b);
+  enEski.setUTCFullYear(enEski.getUTCFullYear() - PLAN_TARIHI_AZAMI_YIL);
+  return d >= enEski.getTime();
+}
+
+// Planin FMEA'yi demirleyecek tarihi: satir sirasi rastgele oldugu icin EN
+// GUNCEL revizyon tarihi alinir, sonra guvenilirlik suzgecinden gecirilir.
+export function planTarihiSec(planlar: any[], bugun: Date = new Date()) {
+  const ham = (planlar || []).map(x => met(x?.tr_revtarih).slice(0, 10))
+    .filter(Boolean).sort().pop() || '';
+  const guvenilmez = !!ham && !planTarihiGecerliMi(ham, bugun);
+  return { tarih: guvenilmez ? '' : ham, ham, guvenilmez };
+}
+
+// Aksiyon hedef tarihi: yuksek AP daha kisa vadeli. Plan tarihi gecmisteyse
+// termin BUGUNDEN hesaplanir - gecmise dusen termin anlamsizdir.
 export function hedefTarih(planTarihi: string, ap: string): string {
-  const t = planTarihi ? new Date(planTarihi) : new Date();
+  const bugun = new Date();
+  const p = planTarihi ? new Date(planTarihi) : bugun;
+  const t = p.getTime() > bugun.getTime() ? p : bugun;
   const gun = ap === 'H' ? 30 : ap === 'M' ? 60 : 90;
-  t.setDate(t.getDate() + gun);
-  return t.toISOString().slice(0, 10);
+  const s = new Date(t);
+  s.setDate(s.getDate() + gun);
+  return s.toISOString().slice(0, 10);
 }
 // acik: gercek bir eksigi kapatan is (acik gorev dogar). Bayraksizlar mevcut
 // uygulamayi belgeler ve Completed dogar.
@@ -135,8 +168,10 @@ export function aksiyonlar(ap: string, it: any, girdiMi = false): Aksiyon[] {
   // TESPİT — ölçümü kayda bağlar (D'yi düşürür)
   if (!yontem) liste.push({ tur: 'detection', acik: true,
     metin: `${k} için ölçüm yöntemi ve numune büyüklüğü kontrol planında tanımlanır (şu an tanımlı değil)` });
+  // Numune/siklik burada TEKRAR EDILMEZ: kontrol planinin kendi sutunlarinda
+  // duruyor. Aksiyon plana atif yapar ki plan revize olunca celiski cikmasin.
   else liste.push({ tur: 'detection',
-    metin: `İlk parça ve son parçada ${k}, ${yontem} ile ölçülüp kontrol formuna kaydedilir (${siklik(it, girdiMi)})` });
+    metin: `${k}, kontrol planındaki numune ve sıklığa göre ${yontem} ile ölçülüp sonucu kontrol formuna kaydedilir` });
 
   // AP yüksekse ölçümü sınır kontrolüne bağla — ek yatırım gerektirmez
   if (ap === 'H' && yontem) liste.push({ tur: 'detection', acik: true,
@@ -263,6 +298,8 @@ export interface UretimSonuc {
   planTarihi: string;
   planKod: string;
   planRev: string;
+  planTarihiHam: string;      // plandaki ham deger (guvenilmez olsa da)
+  tarihGuvenilmez: boolean;   // ham deger vardi ama kullanilmadi
 }
 
 // ── İskelet üretici (saf: test edilebilir) ────────────────────────────────
@@ -560,10 +597,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   const ilk = planHam[0] || {};
   const urunAdi = met(ilk.stok_adi) || stokKodu;
   const planNo = [met(ilk.plan_no) && `Plan ${met(ilk.plan_no)}`, met(ilk.rev_no) && `Rev.${met(ilk.rev_no)}`].filter(Boolean).join(' ') || 'kontrol planı';
-  // FMEA/aksiyon tarihleri kontrol planinin revizyon tarihinden turetilir.
-  // Satir sirasi rastgele oldugu icin planin EN GUNCEL revizyon tarihi alinir.
-  const planTarihi = planHam.map(x => met(x.tr_revtarih).slice(0, 10))
-    .filter(Boolean).sort().pop() || '';
+  const { tarih: planTarihi, ham: planTarihiHam, guvenilmez: tarihGuvenilmez } = planTarihiSec(planHam);
   // Mevcut projelerden ogren (hata turu, etki, siddet, nedenler, aksiyonlar)
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
@@ -573,7 +607,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;
 
   return {
-    fmeaData: fd, urunAdi, planNo, planTarihi,
+    fmeaData: fd, urunAdi, planNo, planTarihi, planTarihiHam, tarihGuvenilmez,
     planKod: met(ilk.plan_no), planRev: met(ilk.rev_no),
     ozet: {
       adim: Object.keys(fd.processSteps).length,
