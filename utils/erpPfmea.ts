@@ -453,7 +453,9 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
 async function ajanTazele(yol: string, kod: string): Promise<void> {
   try {
     const c = new AbortController();
-    const z = setTimeout(() => c.abort(), 180000);
+    // Ajan bilinmeyen kodda yanit vermeyebiliyor; kisa tutulur ki hatali bir
+    // kod toplu uretimi dakikalarca bekletmesin (gercek cekim birkac saniye).
+    const z = setTimeout(() => c.abort(), 45000);
     await fetch(`http://127.0.0.1:17777/${yol}?codes=${encodeURIComponent(kod)}`, { signal: c.signal });
     clearTimeout(z);
   } catch { /* ajan yok - eldeki veriyle devam */ }
@@ -586,6 +588,12 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
 }
 
 // Kontrol planı olan ürünlerin listesi (arama kutusu için)
+// Girilen metinden urun kodlari: virgul, noktali virgul veya satir sonu ile
+// ayrilir; bosluklar kirpilir, tekrarlar elenir (sira korunur).
+export function kodListesi(metin: any): string[] {
+  return [...new Set(met(metin).split(/[,;\n]/).map(t => t.trim()).filter(Boolean))];
+}
+
 export async function erpUrunListesi(): Promise<{ kod: string; ad: string }[]> {
   const d = await sorgu('leansys_kontrol_plani?select=stok_kodu,stok_adi&limit=20000');
   const m = new Map<string, string>();

@@ -518,5 +518,18 @@ Object.values(fdAta.failureCauses).forEach(c => {
   assert.strictEqual(kisiler.size, 1, 'bir nedenin isleri tek sahipte olmali');
 });
 
+
+// ── Çoklu ürün kodu ayrıştırma ──
+// Kullanıcı "205.0.214-C, 203.0.414" yazıp tek seferde çok PFMEA üretebiliyor.
+assert.deepStrictEqual(K.kodListesi('205.0.214-C'), ['205.0.214-C']);
+assert.deepStrictEqual(K.kodListesi('205.0.214-C, 203.0.414 , 227.0.132'),
+  ['205.0.214-C', '203.0.414', '227.0.132'], 'virgül ve boşluklar');
+assert.deepStrictEqual(K.kodListesi('a;b\nc'), ['a', 'b', 'c'], 'noktalı virgül ve satır sonu');
+assert.deepStrictEqual(K.kodListesi('a, a , b'), ['a', 'b'], 'tekrar elenir, sıra korunur');
+assert.deepStrictEqual(K.kodListesi('  ,  , '), [], 'boş girdi');
+assert.deepStrictEqual(K.kodListesi(null), []);
+assert.deepStrictEqual(K.kodListesi('9MM.4.648, 944.4.KFR30-065-1'),
+  ['9MM.4.648', '944.4.KFR30-065-1'], 'nokta, harf ve tire bozulmamalı');
+
 console.log('OK ERP’den PFMEA: AP tablosu, S/O/D kuralları (emniyet yalnız S), girdi hammaddesi ayrımı,');
 console.log('   mevcut kontroller, aksiyonlar, iskelet zinciri; operasyon kartı yokken plandan\n   adım kurma, aynı op tek adım, giriş ayrımı ve hafizadan uyarlama doğru.');

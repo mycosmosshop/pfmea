@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode, FailureCause, FailureEffect, ProcessItem, RegistryData, FlowchartSymbolDef, ProjectData, FullProjectState, FmeaAction, HistoryEntry } from './types';
-import { erpdenUret, erpUrunListesi } from './utils/erpPfmea';
+import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari } from './utils/erpPfmea';
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
 import FmeaTreeView from './components/FmeaTreeView';
@@ -501,65 +501,106 @@ const App: React.FC = () => {
     try { setErpListe(await erpUrunListesi()); setErpDurum(''); }
     catch (e:any) { setErpDurum('Ürün listesi okunamadı: ' + (e?.message || e)); }
   };
+  // Tek bir kod icin projeyi kurar (kaydetmez).
+  const erpProjeKur = (kod: string, s: any) => {
+    const yeni: any = createNewProjectState();
+    yeni.fmeaData = s.fmeaData;
+    yeni.otomatik = true;   // hafiza bu projeden ogrenmesin (kendi ciktisi)
+    // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
+    // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
+    const tarih = s.planTarihi || new Date().toISOString().slice(0, 10);
+    const pd: any = yeni.projectData;
+    yeni.projectData = {
+      ...pd,
+      fmea: { ...pd.fmea,
+        project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})`,
+        firstFmeaDate: tarih, lastRevisionDate: tarih,
+        // Diger projelerdeki bicim: "<plan no> / Rev.<nn>" (or. 1 / Rev.00)
+        fmeaNumberVersion: [s.planKod, `Rev.${String(s.planRev || '0').padStart(2, '0')}`]
+          .filter(Boolean).join(' / '),
+        projectId: `proj_${kod.replace(/[.\-]/g, '_')}`,
+      },
+      cp: { ...(pd.cp || {}),
+        controlPlanNumber: s.planKod || (pd.cp || {}).controlPlanNumber,
+        dateOrig: tarih, dateRev: tarih,
+        partNameDescription: s.urunAdi, partNumberChangeLevel: kod,
+        notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
+      pf: { ...(pd.pf || {}), processName: s.urunAdi, partDescription: kod,
+        dateOrig: tarih, dateRev: tarih, revisionLevel: s.planRev || '' },
+      history: [
+        ...((pd.history as any[]) || []),
+        { id: `h_${yeni.id}`, revision: s.planRev || '0', date: tarih,
+          changeDescription: `ERP'den otomatik üretildi — ${s.ozet.adim} proses adımı, ${s.ozet.karakteristik} karakteristik`
+            + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} karakteristik benzer projelerden uyarlandı` : ''),
+          changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`,
+          preparedBy: '', approvedBy: '' },
+      ],
+    } as any;
+    return { yeni, tarih };
+  };
+
   const erpUret = async () => {
-    const kod = erpKod.trim();
-    if (!kod) { setErpDurum('Önce bir ürün kodu seçin.'); return; }
-    setErpMesgul(true); setErpDurum('ERP verisi okunuyor ve PFMEA üretiliyor…');
-    try {
-      const s = await erpdenUret(kod);
-      const yeni: any = createNewProjectState();
-      yeni.fmeaData = s.fmeaData;
-      yeni.otomatik = true;   // hafiza bu projeden ogrenmesin (kendi ciktisi)
-      // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
-      // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
-      const bugun = new Date().toISOString().slice(0, 10);
-      const tarih = s.planTarihi || bugun;
-      const pd: any = yeni.projectData;
-      yeni.projectData = {
-        ...pd,
-        fmea: { ...pd.fmea,
-          project: `${kod} PFMEA`, productName: `${s.urunAdi} (${kod})`,
-          firstFmeaDate: tarih, lastRevisionDate: tarih,
-          // Diger projelerdeki bicim: "<plan no> / Rev.<nn>" (or. 1 / Rev.00)
-          fmeaNumberVersion: [s.planKod, `Rev.${String(s.planRev || '0').padStart(2, '0')}`]
-            .filter(Boolean).join(' / '),
-          projectId: `proj_${kod.replace(/[.\-]/g, '_')}`,
-        },
-        cp: { ...(pd.cp || {}),
-          controlPlanNumber: s.planKod || (pd.cp || {}).controlPlanNumber,
-          dateOrig: tarih, dateRev: tarih,
-          partNameDescription: s.urunAdi, partNumberChangeLevel: kod,
-          notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
-        pf: { ...(pd.pf || {}), processName: s.urunAdi, partDescription: kod,
-          dateOrig: tarih, dateRev: tarih, revisionLevel: s.planRev || '' },
-        history: [
-          ...((pd.history as any[]) || []),
-          { id: `h_${Date.now()}`, revision: s.planRev || '0', date: tarih,
-            changeDescription: `ERP'den otomatik üretildi — ${s.ozet.adim} proses adımı, ${s.ozet.karakteristik} karakteristik`
-              + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} karakteristik benzer projelerden uyarlandı` : ''),
-            changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`,
-            preparedBy: '', approvedBy: '' },
-        ],
-      } as any;
-      await saveProject(yeni);
-      setProjects(await getAllProjects());   // panoda hemen gorunsun (diger kayitlarla ayni akis)
-      setErpMesgul(false); setErpAcik(false);
+    const kodlar = erpKodlari(erpKod);
+    if (!kodlar.length) { setErpDurum('Önce bir ürün kodu girin.'); return; }
+    setErpMesgul(true);
+
+    const basarili: { kod: string; s: any; tarih: string; yeni: any }[] = [];
+    const hatali: { kod: string; hata: string }[] = [];
+
+    for (let i = 0; i < kodlar.length; i++) {
+      const kod = kodlar[i];
+      setErpDurum(kodlar.length > 1
+        ? `${i + 1}/${kodlar.length} — ${kod} üretiliyor…`
+        : 'ERP verisi okunuyor ve PFMEA üretiliyor…');
+      try {
+        const s = await erpdenUret(kod);
+        const { yeni, tarih } = erpProjeKur(kod, s);
+        await saveProject(yeni);
+        basarili.push({ kod, s, tarih, yeni });
+      } catch (e: any) {
+        // Bir kod patlarsa digerleri devam eder; ozet raporda yazar.
+        hatali.push({ kod, hata: e?.message || String(e) });
+      }
+    }
+
+    setProjects(await getAllProjects());   // panoda hemen gorunsun
+    setErpMesgul(false);
+
+    if (!basarili.length) {
+      setErpDurum('Hiçbir ürün üretilemedi:\n' + hatali.map(h => `• ${h.kod}: ${h.hata}`).join('\n'));
+      return;
+    }
+    setErpAcik(false); setErpDurum('');
+
+    if (basarili.length === 1 && !hatali.length) {
+      // Tek ürün: eskisi gibi doğrudan editöre geç
+      const { kod, s, tarih, yeni } = basarili[0];
       setCurrentProjectId(yeni.id);
       setData(yeni.fmeaData);
       setRegistryData(yeni.registryData);
       setProjectData(yeni.projectData);
       setAppView('editor');
       setLeftView('project');
-      alert(`PFMEA üretildi\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
+      alert(`PFMEA üretildi — ${kod}\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
         + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
         + `Benzer projelerden uyarlanan karakteristik: ${s.ozet.uyarlanan}\n`
         + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)' : ' (planda tarih yok — bugün)'}`
         + (s.ozet.planiOlmayan ? `\n\nUYARI: ${s.ozet.planiOlmayan} hammaddenin girdi kontrol planı yok.` : '')
         + (s.ozet.opKartiYok ? `\n\nUYARI: Operasyon kartı ERP'de yok (LeanSys'ten de gelmedi) — proses adımları kontrol planındaki op numaralarından kuruldu; makine adlarını kontrol edin.` : ''));
-    } catch (e:any) {
-      setErpMesgul(false); setErpDurum('Hata: ' + (e?.message || e));
+      return;
     }
+
+    // Çoklu üretim: panoda kal, satır satır özet ver
+    const satir = basarili.map(b =>
+      `✓ ${b.kod} — ${b.s.ozet.adim} adım, ${b.s.ozet.karakteristik} karakteristik, ${b.s.ozet.neden} neden`
+      + (b.s.ozet.planiOlmayan ? `  (${b.s.ozet.planiOlmayan} hammaddede girdi planı yok)` : '')
+      + (b.s.ozet.opKartiYok ? '  (operasyon kartı yok — adımlar plandan)' : ''));
+    const hataSatir = hatali.map(h => `✗ ${h.kod} — ${h.hata}`);
+    alert(`${basarili.length}/${kodlar.length} PFMEA üretildi\n\n`
+      + satir.join('\n')
+      + (hataSatir.length ? `\n\nÜretilemeyen:\n${hataSatir.join('\n')}` : '')
+      + `\n\nProjeler panoda listelendi; açmak için satıra tıklayın.`);
   };
 
   const handleNewProject = () => {
@@ -1849,21 +1890,27 @@ const App: React.FC = () => {
                 karakteristikler, hata türleri ve S/O/D + AP + aksiyonlar üretilir.
                 Üretilen değerler <b>öneridir</b>; her nedenin notunda kaynağı yazılıdır.
               </p>
-              <label className="block text-sm font-semibold mb-1">Ürün kodu</label>
+              <label className="block text-sm font-semibold mb-1">
+                Ürün kodu <span className="font-normal text-gray-500">— birden fazlası için virgülle ayırın</span>
+              </label>
               <input list="erpUrunler" value={erpKod} onChange={e => setErpKod(e.target.value)}
-                placeholder="örn. 205.0.214-C" disabled={erpMesgul}
+                placeholder="örn. 205.0.214-C, 203.0.414, 227.0.132" disabled={erpMesgul}
                 className="w-full border border-gray-300 rounded px-3 py-2 mb-1" />
               <datalist id="erpUrunler">
                 {erpListe.map(u => <option key={u.kod} value={u.kod}>{u.ad}</option>)}
               </datalist>
-              <div className="text-xs text-gray-500 mb-3">{erpListe.length ? `${erpListe.length} üründe kontrol planı var` : ''}</div>
-              {erpDurum && <div className="text-sm mb-3 text-gray-700">{erpDurum}</div>}
+              <div className="text-xs text-gray-500 mb-3">
+                {erpKodlari(erpKod).length > 1
+                  ? `${erpKodlari(erpKod).length} ürün — her biri için ayrı PFMEA üretilir, sırayla`
+                  : (erpListe.length ? `${erpListe.length} üründe kontrol planı var` : '')}
+              </div>
+              {erpDurum && <div className="text-sm mb-3 text-gray-700 whitespace-pre-line max-h-40 overflow-auto">{erpDurum}</div>}
               <div className="flex justify-end gap-2">
                 <button onClick={() => setErpAcik(false)} disabled={erpMesgul}
                   className="px-4 py-2 text-sm rounded-md bg-gray-200 hover:bg-gray-300">Kapat</button>
                 <button onClick={erpUret} disabled={erpMesgul}
                   className="px-4 py-2 text-sm font-semibold rounded-md text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-60">
-                  {erpMesgul ? 'Üretiliyor…' : 'Üret'}
+                  {erpMesgul ? 'Üretiliyor…' : (erpKodlari(erpKod).length > 1 ? `${erpKodlari(erpKod).length} Ürünü Üret` : 'Üret')}
                 </button>
               </div>
             </div>
