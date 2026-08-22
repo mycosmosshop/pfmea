@@ -71,6 +71,9 @@ export function tespit(it: any): number {
   const f = buyuk(it.ornekleme_sikligi);
   let d: number;
   if (/%100|100%|OTOMAT|SENSÖR|SENSOR|KAMERA|MASTAR|GAUGE|POKA/.test(y)) d = 2;
+  // Tanimli test standardi / talimat kodu (TL206, TL 07, ISO 3795, FMVSS 302,
+  // DIN, ASTM, EN): olculebilir, dokumante laboratuvar testi - kumpas ailesi.
+  else if (/^TL ?\d|ISO ?\d|FMVSS|DIN ?\d|ASTM|TS ?EN|EN ?ISO/.test(y)) d = 4;
   else if (/KUMPAS|MİKROMETRE|MIKROMETRE|TERAZİ|TERAZI|TARTI|KOMPARATÖR|CETVEL|ÖLÇÜM|OLCUM|TEST|CİHAZ|CIHAZ/.test(y)) d = 4;
   else if (/GÖZLE|GOZLE|GÖRSEL|GORSEL|VİZÜEL|VIZUEL|BAKARAK/.test(y)) d = 7;
   else if (!y) d = 9;                        // yöntem tanımsız → tespit güvencesi yok
@@ -177,9 +180,14 @@ export function aksiyonlar(ap: string, it: any, girdiMi = false): Aksiyon[] {
   if (ap === 'H' && yontem) liste.push({ tur: 'detection', acik: true,
     metin: `${yontem} ölçüm formuna alt/üst sınır${hd} basılır; sınır dışı değerde parça ayrılır ve ayar teyit edilmeden devam edilmez` });
 
-  // Emniyet/mevzuat: AP düşük olsa da sürekliliği belgelenmeli
-  if (emniyetMi(it)) liste.push({ tur: 'prevention',
-    metin: `${k} için laboratuvar/tedarikçi sertifikasının geçerliliği izlenir; malzeme veya reçete değişiminde yeniden test edilir` });
+  // Emniyet/mevzuat: testin KENDISI aksiyondur - kontrol plani neyi soyluyorsa
+  // o testin yapildigi ve kayda gectigi guvence altina alinir.
+  if (emniyetMi(it)) {
+    liste.push({ tur: 'detection',
+      metin: `${yontem ? `${yontem} ` : ''}${k} testi kontrol planındaki numune ve sıklığa göre yapılır; sonuç raporu parti kaydına eklenir` });
+    liste.push({ tur: 'prevention',
+      metin: `${k} için onaylı malzeme listesi ve tedarikçi sertifikası her partide teyit edilir; malzeme veya reçete değişiminde yeniden test edilmeden kullanılmaz` });
+  }
 
   return liste;
 }
@@ -193,8 +201,13 @@ export function doluDeger<T>(v: any, varsayilan: T): T {
   return v === null || v === undefined || v === '' ? varsayilan : v;
 }
 
+//   O: onleme aksiyonu TANIMLI bir onleyici kontrol kurar - kuralin kendi
+//      "aciklamali kontrol" seviyesi (3). Mevcut deger zaten iyiyse bozulmaz.
+//   D: tespit aksiyonu yontemi degistirmez, yalniz uygulanmasini ve kaydini
+//      guvenceye alir - bir kademe.
+export const IYILESTIRILMIS_O = 3;
 export function iyilestirme(S: number, O: number, D: number, aks: Aksiyon[]) {
-  const rO = aks.some(a => a.tur === 'prevention') ? Math.max(2, O - 1) : O;
+  const rO = aks.some(a => a.tur === 'prevention') ? Math.min(O, IYILESTIRILMIS_O) : O;
   const rD = aks.some(a => a.tur === 'detection') ? Math.max(2, D - 1) : D;
   return { S, O: rO, D: rD, ap: apHesapla(S, rO, rD) };
 }

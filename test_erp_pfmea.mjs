@@ -457,22 +457,48 @@ assert.ok(metinler('H', { olculecek: 'Boy', yontem: 'Şeritmetre', hedef_nicel: 
 });
 
 // ── Optimizasyon (Adım 6): revize S/O/D ve AP ──
+// Önleme aksiyonu TANIMLI bir önleyici kontrol kurar → kuralın kendi
+// "açıklamalı kontrol" seviyesi (3). Tespit aksiyonu yöntemi değiştirmez,
+// uygulanmasını güvenceye alır → bir kademe.
 const iy = K.iyilestirme(8, 5, 7, [{ tur: 'prevention' }, { tur: 'detection' }]);
 assert.strictEqual(iy.S, 8, 'şiddet proses aksiyonuyla düşmez');
-assert.strictEqual(iy.O, 4);
-assert.strictEqual(iy.D, 6);
-assert.strictEqual(iy.ap, K.apHesapla(8, 4, 6));
+assert.strictEqual(iy.O, 3, 'önleme aksiyonu O’yu tanımlı kontrol seviyesine çeker');
+assert.strictEqual(iy.D, 6, 'tespit aksiyonu bir kademe');
+assert.strictEqual(iy.ap, K.apHesapla(8, 3, 6));
 assert.strictEqual(K.iyilestirme(8, 5, 7, [{ tur: 'detection' }]).O, 5, 'önleme yoksa O düşmez');
 assert.strictEqual(K.iyilestirme(8, 5, 7, [{ tur: 'prevention' }]).D, 7, 'tespit yoksa D düşmez');
 assert.strictEqual(K.iyilestirme(8, 2, 2, [{ tur: 'prevention' }, { tur: 'detection' }]).O, 2,
-  'tek kademe iyileştirme 2 nin altına inmemeli');
+  'zaten daha iyi olan O bozulmamalı');
+assert.strictEqual(K.iyilestirme(8, 3, 4, [{ tur: 'prevention' }]).O, 3,
+  'hayali iyileştirme yok: 3’ün altına iddia edilmez');
+
+// ── Yanma testi: test standardı tanınmalı ve aksiyon AP’yi gerçekten düşürmeli ──
+// TL206/TL207 laboratuvar test kodu; tanınmayınca genel 5’e düşüyordu.
+assert.strictEqual(K.tespit({ yontem: 'TL206' }), 4, 'test standardı ölçülebilir yöntem');
+assert.strictEqual(K.tespit({ yontem: 'TL 07' }), 4);
+assert.strictEqual(K.tespit({ yontem: 'ISO 3795' }), 4);
+assert.strictEqual(K.tespit({ yontem: 'FMVSS 302' }), 4);
+assert.strictEqual(K.tespit({ yontem: 'Gözle' }), 7, 'görsel kontrol değişmedi');
+
+const yanmaSatir = { olculecek: 'Yanma Hızı', yontem: 'TL206', proses_kontrol: 0, giris: 1 };
+const S9 = K.siddet(yanmaSatir, true), O9 = K.olasilik(yanmaSatir), D9 = K.tespit(yanmaSatir);
+assert.strictEqual(S9, 9, 'mevzuat karakteristiği');
+assert.strictEqual(K.apHesapla(S9, O9, D9), 'H', 'başlangıçta öncelikli');
+const yanmaAks = K.aksiyonlar('H', yanmaSatir, true);
+assert.ok(yanmaAks.some(a => a.tur === 'detection' && a.metin.includes('TL206')),
+  'aksiyon testin kendisini yazmalı');
+assert.ok(yanmaAks.some(a => a.tur === 'prevention' && a.metin.includes('onaylı malzeme')),
+  'onaylı malzeme/sertifika önlemesi');
+const yanmaRev = K.iyilestirme(S9, O9, D9, yanmaAks);
+assert.strictEqual(yanmaRev.ap, 'L', 'test + onaylı malzeme aksiyonu sonrası AP düşmeli');
+assert.strictEqual(yanmaRev.S, 9, 'şiddet aynen kalır — mevzuat riski yok olmaz');
 
 const fdRev = K.iskeletUret({ kod: 'X', ad: 'X' }, [], [{ op_no: 1, makine_adi: 'M' }],
   [{ op_no: 1, olculecek: 'Kesim ölçüsü', yontem: 'Kumpas', proses_kontrol: 'Talimat' }], {}, 'kontrol planı');
 const rc = Object.values(fdRev.failureCauses)[0];
 assert.strictEqual(rc.revisedSeverity, 5);
-assert.strictEqual(rc.revisedOccurrence, rc.occurrence - 1);
-assert.strictEqual(rc.revisedDetection, rc.detection - 1);
+assert.strictEqual(rc.revisedOccurrence, Math.min(rc.occurrence, 3), 'O tanımlı kontrol seviyesine');
+assert.strictEqual(rc.revisedDetection, rc.detection - 1, 'D bir kademe');
 assert.strictEqual(rc.revisedActionPriority, K.apHesapla(5, rc.revisedOccurrence, rc.revisedDetection));
 
 
