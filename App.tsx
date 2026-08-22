@@ -475,6 +475,20 @@ const App: React.FC = () => {
         try {
             const savedProjects = await getAllProjects();
             setProjects(savedProjects);
+            // Derin baglanti: APQP modulu ?proje=<id> ile dogrudan projeyi acar
+            // (once yalniz modul aciliyordu, kullanici listede ariyordu).
+            const istenen = new URLSearchParams(window.location.search).get('proje');
+            if (istenen) {
+                const proje = savedProjects.find(x => String(x.id) === istenen);
+                if (proje) {
+                    setCurrentProjectId(proje.id);
+                    setData(proje.fmeaData);
+                    setRegistryData(withStandardSymbols(proje.registryData));
+                    setProjectData(proje.projectData);
+                    setAppView('editor');
+                    setLeftView('project');
+                }
+            }
         } catch (error) {
             console.error("Failed to initialize the app with projects from DB:", error);
             setProjects([]);
