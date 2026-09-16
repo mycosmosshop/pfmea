@@ -9,7 +9,7 @@
 import { strict as assert } from 'node:assert';
 // Node 22 .ts dosyasini dogrudan yukluyor; onceki regex ile tip siyirma
 // kirilgandi (yeni bir tip anotasyonu testi sessizce cokertiyordu).
-import { aksiyonGecmisi, ozetle } from './actionHistory.ts';
+import { aksiyonGecmisi, ozetle, gecmisiSirala } from './actionHistory.ts';
 
 let hata = 0;
 const ok = (ad, kosul, ek) => {
@@ -148,6 +148,42 @@ const AYNI = (n) => ({ failureCauses: Object.fromEntries(
 
 ok('boş veride satır yok', aksiyonGecmisi({}, [], {}).length === 0);
 ok('failureCauses yoksa çökmüyor', aksiyonGecmisi({ failureCauses: null }, [], {}).length === 0);
+
+// ── Sıralama ve revizyon numaralandırma ───────────────────────────────
+// Aksiyon satirlari sona ekleniyordu: ustte 2026 uretim kaydi, altinda
+// 2025 aksiyonlari. Revizyon alani da hic artmiyordu.
+{
+  const G = [
+    { id: 'a', date: '2026-06-05', changeDescription: 'ERP uretimi' },
+    { id: 'b', date: '2025-01-03', changeDescription: 'Onleme 1' },
+    { id: 'c', date: '2025-01-03', changeDescription: 'Onleme 2' },
+    { id: 'd', date: '2025-03-17', changeDescription: 'Onleme 3' },
+  ];
+  const s = gecmisiSirala(G);
+  ok('tarihe göre baştan sona sıralı',
+     s.map(x => x.date).join() === '2025-01-03,2025-01-03,2025-03-17,2026-06-05',
+     s.map(x => x.date));
+  ok('revizyon tarihle birlikte artıyor',
+     s.map(x => x.revision).join() === 'Rev.00,Rev.00,Rev.01,Rev.02',
+     s.map(x => x.revision));
+  ok('aynı tarih aynı revizyon', s[0].revision === s[1].revision);
+  ok('satır içeriği korunuyor',
+     s.map(x => x.changeDescription).join() === 'Onleme 1,Onleme 2,Onleme 3,ERP uretimi');
+  ok('aynı tarihte özgün sıra korunuyor', s[0].id === 'b' && s[1].id === 'c');
+}
+{
+  const s = gecmisiSirala([
+    { id: 'x', changeDescription: 'tarihsiz' },
+    { id: 'y', date: '2025-05-01' },
+  ]);
+  ok('tarihsiz satır sona', s[1].id === 'x', s.map(x => x.id));
+  ok('tarihsiz satır da numaralanıyor', s[1].revision === 'Rev.01');
+}
+ok('boş geçmiş çökmüyor', gecmisiSirala([]).length === 0 && gecmisiSirala(undefined).length === 0);
+ok('sıralama kararlı (iki kez aynı sonuç)', (() => {
+  const G = [{ id: 'a', date: '2025-02-02' }, { id: 'b', date: '2025-01-01' }];
+  return JSON.stringify(gecmisiSirala(gecmisiSirala(G))) === JSON.stringify(gecmisiSirala(G));
+})());
 
 console.log('='.repeat(62));
 console.log(hata ? `${hata} HATA` : 'TÜM KONTROLLER GEÇTİ');

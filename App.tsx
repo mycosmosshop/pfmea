@@ -3,7 +3,7 @@ import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode
 import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari, mevcutProje } from './utils/erpPfmea';
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
-import { aksiyonGecmisi } from './utils/actionHistory';
+import { aksiyonGecmisi, gecmisiSirala } from './utils/actionHistory';
 
 // Yayın zamanı vite tarafından gömülür (vite.config.ts → define.__BUILD__).
 declare const __BUILD__: string;
@@ -757,12 +757,6 @@ const App: React.FC = () => {
         onaylayan: projectData.fmea.fmeaApprover || '',
     });
 
-    if (changes.length === 0 && aksiyonSatirlari.length === 0) {
-        alert("Son revizyon kaydından beri tabloda bir değişiklik ve "
-            + "geçmişe eklenecek yeni aksiyon tespit edilmedi.");
-        return;
-    }
-
     const yeniSatirlar: HistoryEntry[] = [...aksiyonSatirlari];
     if (changes.length > 0) {
         const MAX = 80;
@@ -779,9 +773,27 @@ const App: React.FC = () => {
         });
     }
 
+    // Tarihe göre sırala ve revizyonları yeniden numaralandır. Yeni satır
+    // olmasa bile çalışır: mevcut bozuk sıra tek tıklamayla düzelir.
+    const tumGecmis = gecmisiSirala([...currentHistory, ...yeniSatirlar]);
+    if (!yeniSatirlar.length
+        && JSON.stringify(tumGecmis) === JSON.stringify(currentHistory)) {
+        alert("Son revizyon kaydından beri tabloda bir değişiklik ve "
+            + "geçmişe eklenecek yeni aksiyon tespit edilmedi;"
+            + " sıralama da zaten doğru.");
+        return;
+    }
+    const son = tumGecmis[tumGecmis.length - 1];
     const newProjectData: ProjectData = {
         ...projectData,
-        history: [...currentHistory, ...yeniSatirlar],
+        // Künye geçmişin son satırıyla eşitlenir (üstteki "⇅ Geçmişten al"
+        // uyarısı bu yüzden sürekli açık kalıyordu).
+        fmea: son ? { ...projectData.fmea,
+            fmeaNumberVersion: `${(projectData.fmea.fmeaNumberVersion || '')
+                .split('/')[0].trim() || 'FMEA'} / ${son.revision}`,
+            lastRevisionDate: son.date || projectData.fmea.lastRevisionDate,
+        } : projectData.fmea,
+        history: tumGecmis,
         historyBaseline: JSON.parse(JSON.stringify(data)), // yeni temel = mevcut durum
     };
     await handleProjectDataSave(newProjectData);
@@ -791,7 +803,8 @@ const App: React.FC = () => {
         .reduce((n, c) => n + ((c?.actions || []).length), 0);
     alert(`${aksiyonSatirlari.length} aksiyon kaydı geçmişe eklendi`
         + (changes.length ? ` · ${changes.length} tablo değişikliği` : '')
-        + '.'
+        + `. Geçmiş tarihe göre sıralandı, ${tumGecmis.length} satır`
+        + `${son ? ` (${son.revision})` : ''}.`
         + (aksiyonSatirlari.length === 0 && toplamAksiyon > 0
             ? `\n\nTablodaki ${toplamAksiyon} aksiyonun tamamı ya geçmişte zaten kayıtlı`
               + ' ya da tarih/açıklama alanı boş.'

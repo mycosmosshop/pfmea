@@ -40,6 +40,32 @@ export interface AksiyonGecmisiSecenek {
 const icerikAnahtari = (h: { date?: string; preparedBy?: string; changeDescription?: string }) =>
   `${String(h.date || '').slice(0, 10)}|${String(h.preparedBy || '')}|${String(h.changeDescription || '')}`;
 
+/**
+ * Geçmişi tarihe göre sıralar ve revizyonları yeniden numaralandırır.
+ *
+ * Aksiyon satırları mevcut geçmişin SONUNA ekleniyordu: üstte 2026
+ * tarihli üretim kaydı, altında 2025 tarihli aksiyonlar kalıyordu.
+ * Revizyon alanı da hiç artmıyor, hepsi aynı numarayı taşıyordu.
+ *
+ * Aynı tarihli satırlar AYNI revizyona aittir — tek günde kapatılan yedi
+ * aksiyon yedi ayrı revizyon değildir. Tarihsiz satırlar sona alınır ve
+ * kendi aralarındaki sıra korunur.
+ */
+export function gecmisiSirala(gecmis: HistoryEntry[] | undefined): HistoryEntry[] {
+  const sirali = (gecmis || [])
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => (String(a.h.date || '9999-12-31')
+      .localeCompare(String(b.h.date || '9999-12-31'))) || (a.i - b.i))
+    .map(x => x.h);
+  let no = -1;
+  let onceki: string | null = null;
+  return sirali.map(h => {
+    const t = String(h.date || '');
+    if (t !== onceki) { no++; onceki = t; }
+    return { ...h, revision: `Rev.${String(no).padStart(2, '0')}` };
+  });
+}
+
 export function aksiyonGecmisi(
   data: FmeaData,
   mevcutGecmis: HistoryEntry[] | undefined,
