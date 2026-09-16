@@ -8,15 +8,20 @@ import type { FmeaData, HistoryEntry, FmeaAction } from '../types';
  * gerçekleşme tarihi ve sorumlusu var — değişiklik gerçekte o tarihte
  * yapıldı. Her aksiyon ayrı bir geçmiş satırı olur.
  *
- * İki tür tekrar koruması var:
- *  - id ile: satırın id'si `h_act_<aksiyonId>`, aynı aksiyon ikinci
- *    tıklamada yeniden yazılmaz. Metin karşılaştırması kırılgan olurdu;
- *    açıklama sonradan düzenlenince aynı aksiyon tekrar eklenirdi.
- *  - içerik ile: aynı aksiyon metni onlarca hata nedeninde tekrarlanıyor
- *    (216.0.367 ölçümü: 121 satırın yalnız 40'ı farklı, biri 14 kez).
- *    Aynı tarih + sorumlu + açıklama bir kez yazılır; kaç nedende geçtiği
- *    "Değişiklik Nedeni" sütununda belirtilir.
+ * Aksiyon satırları TÜRETİLMİŞTİR, dondurulmuş değil: `h_act_<aksiyonId>`
+ * kimlikli satırlar her çağrıda aksiyonlardan yeniden kurulur. Bir DÖF'ün
+ * tarihi veya sorumlusu sonradan değişince geçmiş de güncellenir; aksiyon
+ * silinince satırı kalkar. Önce "bu id zaten var" denip atlanıyordu ve
+ * güncellenen tarih geçmişe hiç yansımıyordu.
+ *
+ * Aynı aksiyon metni onlarca hata nedeninde tekrarlanıyor (216.0.367
+ * ölçümü: 121 satırın yalnız 40'ı farklı, biri 14 kez). Aynı tarih +
+ * sorumlu + açıklama bir kez yazılır; kaç nedende geçtiği "Değişiklik
+ * Nedeni" sütununda belirtilir.
  */
+
+/** Otomatik üretilen geçmiş satırının kimlik öneki. */
+export const AKSIYON_ONEK = 'h_act_';
 
 /** Uzun metni kelime sınırında keser. */
 export function ozetle(metin: string, enFazla = 140): string {
@@ -28,15 +33,11 @@ export function ozetle(metin: string, enFazla = 140): string {
 }
 
 export interface AksiyonGecmisiSecenek {
-  revision?: string;
   hazirlayan?: string;
   onaylayan?: string;
 }
 
-/**
- * İçerik kimliği. "Değişiklik Nedeni" DIŞARIDA bırakılır: tekrar sayısı
- * oraya yazıldığı için, ikinci tıklamada anahtar değişmesin.
- */
+/** İçerik kimliği — aynı gün, aynı kişi, aynı aksiyon metni tek satırdır. */
 const icerikAnahtari = (h: { date?: string; preparedBy?: string; changeDescription?: string }) =>
   `${String(h.date || '').slice(0, 10)}|${String(h.preparedBy || '')}|${String(h.changeDescription || '')}`;
 
@@ -66,13 +67,11 @@ export function gecmisiSirala(gecmis: HistoryEntry[] | undefined): HistoryEntry[
   });
 }
 
+/** Aksiyonlardan geçmiş satırlarını üretir (tekrarlayan içerik tek satır). */
 export function aksiyonGecmisi(
   data: FmeaData,
-  mevcutGecmis: HistoryEntry[] | undefined,
   secenek: AksiyonGecmisiSecenek = {},
 ): HistoryEntry[] {
-  const varOlanId = new Set((mevcutGecmis || []).map(h => h.id));
-  const varOlanIcerik = new Set((mevcutGecmis || []).map(icerikAnahtari));
   // anahtar -> { satır, kaç hata nedeninde geçti }
   const grup = new Map<string, { satir: HistoryEntry; kez: number }>();
 
@@ -90,14 +89,10 @@ export function aksiyonGecmisi(
       const metin = String(a?.description || a?.actionTaken || '').trim();
       if (!tarih || !metin) return;
 
-      const id = `h_act_${a.id}`;
-      if (varOlanId.has(id)) return;      // TEKRAR: bu aksiyon zaten kayıtlı
-      varOlanId.add(id);
-
       const tip = a?.type === 'detection' ? 'Tespit' : 'Önleme';
       const satir: HistoryEntry = {
-        id,
-        revision: secenek.revision || '',
+        id: `${AKSIYON_ONEK}${a.id}`,
+        revision: '',                    // gecmisiSirala() numaralandırır
         date: tarih,
         changeDescription: `${tip} aksiyonu: ${ozetle(metin)}`,
         changeReason: '',
@@ -107,7 +102,6 @@ export function aksiyonGecmisi(
       };
 
       const anahtar = icerikAnahtari(satir);
-      if (varOlanIcerik.has(anahtar)) return;   // geçmişte aynısı duruyor
       const onceki = grup.get(anahtar);
       if (onceki) { onceki.kez++; return; }     // aynı satır ikinci kez yazılmaz
 
@@ -117,7 +111,7 @@ export function aksiyonGecmisi(
     });
   });
 
-  const out = [...grup.values()].map(({ satir, kez }) => {
+  return [...grup.values()].map(({ satir, kez }) => {
     if (kez > 1) {
       satir.changeReason = (satir.changeReason
         ? `${satir.changeReason} (+${kez - 1} benzer neden)`
@@ -125,6 +119,22 @@ export function aksiyonGecmisi(
     }
     return satir;
   });
-  out.sort((x, y) => x.date.localeCompare(y.date));
-  return out;
+}
+
+/**
+ * Geçmişin güncel hâli: elle girilen satırlar korunur, aksiyon satırları
+ * DÖF'lerden yeniden türetilir, sonuç tarihe göre sıralanıp numaralanır.
+ *
+ * Böylece bir aksiyonun tarihi değişince ya da yenisi eklenince düğmeye
+ * basmak geçmişi günceller — eskiden yalnız yeni satır ekleniyordu,
+ * değişen tarih geçmişte eski hâliyle kalıyordu.
+ */
+export function gecmisiTazele(
+  data: FmeaData,
+  mevcutGecmis: HistoryEntry[] | undefined,
+  secenek: AksiyonGecmisiSecenek = {},
+): HistoryEntry[] {
+  const elle = (mevcutGecmis || [])
+    .filter(h => !String(h?.id || '').startsWith(AKSIYON_ONEK));
+  return gecmisiSirala([...elle, ...aksiyonGecmisi(data, secenek)]);
 }

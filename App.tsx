@@ -3,7 +3,7 @@ import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode
 import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari, mevcutProje } from './utils/erpPfmea';
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
-import { aksiyonGecmisi, gecmisiSirala } from './utils/actionHistory';
+import { gecmisiTazele } from './utils/actionHistory';
 
 // Yayın zamanı vite tarafından gömülür (vite.config.ts → define.__BUILD__).
 declare const __BUILD__: string;
@@ -747,24 +747,15 @@ const App: React.FC = () => {
     const baseline = projectData.historyBaseline;
     const changes = diffFmea(baseline, data);
 
-    // ── Aksiyon kayıtları ──
-    // Her aksiyonun kendi tarihi ve sorumlusu var; değişiklik bugün
-    // değil O TARİHTE yapıldı. Mantık utils/actionHistory.ts'te —
-    // saf fonksiyon olduğu için testi var.
-    const aksiyonSatirlari = aksiyonGecmisi(data, currentHistory, {
-        revision: projectData.fmea.fmeaNumberVersion || '',
-        hazirlayan: projectData.fmea.fmeaCreator || '',
-        onaylayan: projectData.fmea.fmeaApprover || '',
-    });
-
-    const yeniSatirlar: HistoryEntry[] = [...aksiyonSatirlari];
+    // Tablo diff'i elle bir satır olarak eklenir (bugünün tarihiyle).
+    const elleSatirlar: HistoryEntry[] = [];
     if (changes.length > 0) {
         const MAX = 80;
         let desc = changes.slice(0, MAX).join('\n');
         if (changes.length > MAX) desc += `\n… (+${changes.length - MAX} değişiklik daha)`;
-        yeniSatirlar.push({
+        elleSatirlar.push({
             id: `h_${Date.now().toString(36)}`,
-            revision: projectData.fmea.fmeaNumberVersion || String(currentHistory.length),
+            revision: '',                       // gecmisiTazele numaralandırır
             date: new Date().toISOString().slice(0, 10),
             changeDescription: desc,
             changeReason: '',
@@ -773,16 +764,20 @@ const App: React.FC = () => {
         });
     }
 
-    // Tarihe göre sırala ve revizyonları yeniden numaralandır. Yeni satır
-    // olmasa bile çalışır: mevcut bozuk sıra tek tıklamayla düzelir.
-    const tumGecmis = gecmisiSirala([...currentHistory, ...yeniSatirlar]);
-    if (!yeniSatirlar.length
-        && JSON.stringify(tumGecmis) === JSON.stringify(currentHistory)) {
-        alert("Son revizyon kaydından beri tabloda bir değişiklik ve "
-            + "geçmişe eklenecek yeni aksiyon tespit edilmedi;"
-            + " sıralama da zaten doğru.");
+    // Aksiyon satırları DÖF'lerden yeniden türetilir: yeni aksiyon eklenir,
+    // tarihi/sorumlusu değişen güncellenir, silinen kalkar. Elle girilen
+    // satırlar korunur. Sonuç tarihe göre sıralanıp numaralandırılır.
+    const tumGecmis = gecmisiTazele(data, [...currentHistory, ...elleSatirlar], {
+        hazirlayan: projectData.fmea.fmeaCreator || '',
+        onaylayan: projectData.fmea.fmeaApprover || '',
+    });
+    if (JSON.stringify(tumGecmis) === JSON.stringify(currentHistory)) {
+        alert("Geçmiş zaten güncel: yeni ya da değişmiş aksiyon yok,"
+            + " tablo değişikliği yok, sıralama da doğru.");
         return;
     }
+    const oncekiOtomatik = currentHistory.filter(h => String(h.id || '').startsWith('h_act_')).length;
+    const simdikiOtomatik = tumGecmis.filter(h => String(h.id || '').startsWith('h_act_')).length;
     const son = tumGecmis[tumGecmis.length - 1];
     const newProjectData: ProjectData = {
         ...projectData,
@@ -801,13 +796,14 @@ const App: React.FC = () => {
     // sessiz kalıyordu, kullanıcı düğmenin çalışmadığını sanıyordu.
     const toplamAksiyon = (Object.values(data.failureCauses || {}) as any[])
         .reduce((n, c) => n + ((c?.actions || []).length), 0);
-    alert(`${aksiyonSatirlari.length} aksiyon kaydı geçmişe eklendi`
+    const fark = simdikiOtomatik - oncekiOtomatik;
+    alert(`${simdikiOtomatik} aksiyon kaydı geçmişte`
+        + (fark > 0 ? ` (${fark} yeni)` : fark < 0 ? ` (${-fark} kalktı)` : ' (tarih/sorumlu güncellendi)')
         + (changes.length ? ` · ${changes.length} tablo değişikliği` : '')
         + `. Geçmiş tarihe göre sıralandı, ${tumGecmis.length} satır`
         + `${son ? ` (${son.revision})` : ''}.`
-        + (aksiyonSatirlari.length === 0 && toplamAksiyon > 0
-            ? `\n\nTablodaki ${toplamAksiyon} aksiyonun tamamı ya geçmişte zaten kayıtlı`
-              + ' ya da tarih/açıklama alanı boş.'
+        + (simdikiOtomatik === 0 && toplamAksiyon > 0
+            ? `\n\nTablodaki ${toplamAksiyon} aksiyonun hiçbirinde tarih ya da açıklama yok.`
             : '')
         + `\n\nSürüm: ${BUILD}`);
   };

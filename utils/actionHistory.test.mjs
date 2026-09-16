@@ -9,7 +9,8 @@
 import { strict as assert } from 'node:assert';
 // Node 22 .ts dosyasini dogrudan yukluyor; onceki regex ile tip siyirma
 // kirilgandi (yeni bir tip anotasyonu testi sessizce cokertiyordu).
-import { aksiyonGecmisi, ozetle, gecmisiSirala } from './actionHistory.ts';
+import { aksiyonGecmisi, ozetle, gecmisiSirala, gecmisiTazele }
+  from './actionHistory.ts';
 
 let hata = 0;
 const ok = (ad, kosul, ek) => {
@@ -48,7 +49,7 @@ console.log('='.repeat(62));
 console.log('PFMEA AKSİYON GEÇMİŞİ');
 console.log('='.repeat(62));
 
-const s1 = aksiyonGecmisi(VERI, [], { revision: '1/0', hazirlayan: 'X', onaylayan: 'Y' });
+const s1 = aksiyonGecmisi(VERI, { hazirlayan: 'X', onaylayan: 'Y' });
 ok(`tarihli ve metinli aksiyonlar satır oldu (${s1.length})`, s1.length === 3, s1.map(x => x.id));
 ok('tarihsiz aksiyon atlandı', !s1.some(x => x.id === 'h_act_a3'));
 ok('metinsiz aksiyon atlandı', !s1.some(x => x.id === 'h_act_a4'));
@@ -81,18 +82,9 @@ ok('değişiklik nedeni failure cause’dan', a1.changeReason.startsWith('Neden:
 ok('özet kelime sınırında kesiyor', ozetle('a'.repeat(50) + ' bcd efg', 55).endsWith('…'));
 ok('kısa metin olduğu gibi', ozetle('kısa') === 'kısa');
 
-// ── TEKRAR koruması ──
-const s2 = aksiyonGecmisi(VERI, s1, { revision: '1/0' });
-ok('ikinci çağrıda tekrar eklenmiyor', s2.length === 0, s2.map(x => x.id));
-
-const yariGecmis = s1.filter(x => x.id === 'h_act_a1');
-const s3 = aksiyonGecmisi(VERI, yariGecmis, {});
-ok('yalnız kayıtlı olmayanlar ekleniyor', s3.length === 2, s3.map(x => x.id));
-
-// Açıklama sonradan düzenlenmiş olsa da tekrar sayılır (id ile eşleşme)
-const duzenlenmis = s1.map(x => ({ ...x, changeDescription: 'elle düzenlendi' }));
-ok('açıklama düzenlenince de tekrar eklenmiyor',
-   aksiyonGecmisi(VERI, duzenlenmis, {}).length === 0);
+// ── Aynı içerik tek satır ─────────────────────────────────────────────
+const s2 = aksiyonGecmisi(VERI, {});
+ok('aynı veriden aynı sonuç', s2.length === s1.length && s2[0].id === s1[0].id);
 
 // ── Aksiyon metni: Prevention/Detection Action, kanit DEGIL ────────────
 // Once actionTaken (kanit) yaziliyordu; gecmise "Mevcut is emri /
@@ -102,7 +94,7 @@ ok('açıklama düzenlenince de tekrar eklenmiyor',
     id: 'x1', type: 'prevention', targetCompletionDate: '2026-01-05',
     description: 'Parametre alani ekranda en uste alinmistir',
     actionTaken: 'Mevcut is emri / operasyon karti' }] } } };
-  const r = aksiyonGecmisi(V, [], {});
+  const r = aksiyonGecmisi(V, {});
   ok('aksiyon metni yazılıyor (kanıt değil)',
      r[0].changeDescription === 'Önleme aksiyonu: Parametre alani ekranda en uste alinmistir',
      r[0].changeDescription);
@@ -112,7 +104,7 @@ ok('açıklama düzenlenince de tekrar eklenmiyor',
     id: 'x2', targetCompletionDate: '2026-01-05',
     actionTaken: 'Yalniz kanit var' }] } } };
   ok('aksiyon metni yoksa kanıt yedek',
-     aksiyonGecmisi(V, [], {})[0].changeDescription.includes('Yalniz kanit var'));
+     aksiyonGecmisi(V, {})[0].changeDescription.includes('Yalniz kanit var'));
 }
 
 // ── Tekrar eleme: ayni metin onlarca hata nedeninde geciyor ────────────
@@ -123,7 +115,7 @@ const AYNI = (n) => ({ failureCauses: Object.fromEntries(
     completionDate: '2026-02-16', description: 'Is emri ekraninda parametre one alindi' }] }]))
 });
 {
-  const r = aksiyonGecmisi(AYNI(14), [], {});
+  const r = aksiyonGecmisi(AYNI(14), {});
   ok('14 aynı aksiyon tek satır', r.length === 1, r.length);
   ok('kaç nedende geçtiği nedende yazıyor',
      r[0].changeReason.includes('+13 benzer neden'), r[0].changeReason);
@@ -131,23 +123,67 @@ const AYNI = (n) => ({ failureCauses: Object.fromEntries(
   const karisik = AYNI(3);
   karisik.failureCauses.c1.actions[0].completionDate = '2026-03-16';
   karisik.failureCauses.c2.actions[0].responsiblePerson = 'Emre Biçer';
-  ok('tarih farklıysa ayrı satır', aksiyonGecmisi(karisik, [], {}).length === 3,
-     aksiyonGecmisi(karisik, [], {}).map(x => x.date + '|' + x.preparedBy));
+  ok('tarih farklıysa ayrı satır', aksiyonGecmisi(karisik, {}).length === 3,
+     aksiyonGecmisi(karisik, {}).map(x => x.date + '|' + x.preparedBy));
 }
 {
-  // Ikinci tiklama: id farkli olsa bile ayni icerik yeniden yazilmaz
-  const ilk = aksiyonGecmisi(AYNI(14), [], {});
-  const baskaId = { failureCauses: { z: { description: 'Baska neden', actions: [{
-    id: 'bambaska', type: 'prevention', responsiblePerson: 'Mete Yılmaz',
-    completionDate: '2026-02-16', description: 'Is emri ekraninda parametre one alindi' }] } } };
-  ok('geçmişte aynı içerik varsa yeni id de eklenmiyor',
-     aksiyonGecmisi(baskaId, ilk, {}).length === 0);
-  ok('tekrar sayısı nedene yazılınca anahtar bozulmuyor',
-     aksiyonGecmisi(AYNI(14), ilk, {}).length === 0);
+  // Ikinci tiklama ayni sonucu vermeli (satir cogalmasin)
+  const bir = gecmisiTazele(AYNI(14), [], {});
+  const iki = gecmisiTazele(AYNI(14), bir, {});
+  ok('ikinci tıklamada satır çoğalmıyor', iki.length === bir.length, [bir.length, iki.length]);
+  ok('ikinci tıklama birebir aynı', JSON.stringify(iki) === JSON.stringify(bir));
 }
 
-ok('boş veride satır yok', aksiyonGecmisi({}, [], {}).length === 0);
-ok('failureCauses yoksa çökmüyor', aksiyonGecmisi({ failureCauses: null }, [], {}).length === 0);
+// ── DOF guncellenince gecmis de guncellenir ───────────────────────────
+// Onceden h_act_<id> "zaten var" deyip atlaniyordu; degisen tarih
+// gecmiste eski haliyle kaliyordu.
+{
+  const veri = (tarih, kisi) => ({ failureCauses: { c1: { description: 'Neden A', actions: [{
+    id: 'a1', type: 'prevention', responsiblePerson: kisi,
+    completionDate: tarih, description: 'Parametre alani one alindi' }] } } });
+
+  const ilk = gecmisiTazele(veri('2026-02-16', 'Mete Yılmaz'), [], {});
+  ok('tek aksiyon tek satır', ilk.length === 1, ilk.length);
+  ok('ilk tarih doğru', ilk[0].date === '2026-02-16');
+
+  const sonra = gecmisiTazele(veri('2026-05-20', 'Mete Yılmaz'), ilk, {});
+  ok('DÖF tarihi değişince geçmiş güncelleniyor',
+     sonra.length === 1 && sonra[0].date === '2026-05-20',
+     sonra.map(x => x.date));
+
+  const kisiDegisti = gecmisiTazele(veri('2026-05-20', 'Emre Biçer'), sonra, {});
+  ok('DÖF sorumlusu değişince de güncelleniyor',
+     kisiDegisti.length === 1 && kisiDegisti[0].preparedBy === 'Emre Biçer',
+     kisiDegisti.map(x => x.preparedBy));
+
+  // Yeni DOF eklenince satir da eklenir
+  const ikiAksiyon = { failureCauses: { c1: { description: 'Neden A', actions: [
+    { id: 'a1', type: 'prevention', responsiblePerson: 'Emre Biçer',
+      completionDate: '2026-05-20', description: 'Parametre alani one alindi' },
+    { id: 'a2', type: 'detection', responsiblePerson: 'Taner Şeşenoğlu',
+      completionDate: '2026-06-01', description: 'Ilk parca kontrolu eklendi' }] } } };
+  const artti = gecmisiTazele(ikiAksiyon, kisiDegisti, {});
+  ok('yeni DÖF satır olarak ekleniyor', artti.length === 2, artti.length);
+  ok('yeni satır sonda (tarih sırası)', artti[1].date === '2026-06-01');
+
+  // DOF silinince satiri kalkar
+  const silindi = gecmisiTazele(veri('2026-05-20', 'Emre Biçer'), artti, {});
+  ok('silinen DÖF satırı kalkıyor', silindi.length === 1, silindi.map(x => x.id));
+
+  // Elle girilen satir HER durumda korunur
+  const elleSatir = { id: 'h_elle', date: '2025-01-01',
+    changeDescription: 'Elle yazılmış kayıt', changeReason: '', preparedBy: 'V', approvedBy: '' };
+  const karma = gecmisiTazele(veri('2026-05-20', 'Emre Biçer'), [elleSatir, ...silindi], {});
+  ok('elle satır korunuyor', karma.some(x => x.id === 'h_elle'), karma.map(x => x.id));
+  ok('elle satır içeriği bozulmuyor',
+     karma.find(x => x.id === 'h_elle').changeDescription === 'Elle yazılmış kayıt');
+  ok('karma listede revizyon yeniden numaralı',
+     karma.map(x => x.revision).join() === 'Rev.00,Rev.01', karma.map(x => x.revision));
+}
+
+
+ok('boş veride satır yok', aksiyonGecmisi({}, {}).length === 0);
+ok('failureCauses yoksa çökmüyor', aksiyonGecmisi({ failureCauses: null }, {}).length === 0);
 
 // ── Sıralama ve revizyon numaralandırma ───────────────────────────────
 // Aksiyon satirlari sona ekleniyordu: ustte 2026 uretim kaydi, altinda
