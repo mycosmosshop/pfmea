@@ -13,7 +13,12 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        // Ekrandaki sürüm damgası: tarayıcı eski bundle'ı önbellekten
+        // çalıştırdığında fark edilsin (yayın sonrası "yeni mi eski mi"
+        // sorusu tahminle cevaplanıyordu).
+        __BUILD__: JSON.stringify(
+          new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'),
       },
       resolve: {
         alias: {

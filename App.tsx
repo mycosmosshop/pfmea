@@ -4,6 +4,10 @@ import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari, mevcutProje } fro
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
 import { aksiyonGecmisi } from './utils/actionHistory';
+
+// Yayın zamanı vite tarafından gömülür (vite.config.ts → define.__BUILD__).
+declare const __BUILD__: string;
+const BUILD = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev';
 import FmeaTreeView from './components/FmeaTreeView';
 import FmeaTable from './components/FmeaTable';
 import ControlPlanTable from './components/ControlPlanTable';
@@ -781,11 +785,18 @@ const App: React.FC = () => {
         historyBaseline: JSON.parse(JSON.stringify(data)), // yeni temel = mevcut durum
     };
     await handleProjectDataSave(newProjectData);
-    if (aksiyonSatirlari.length) {
-        alert(`${aksiyonSatirlari.length} aksiyon kaydı geçmişe eklendi`
-            + (changes.length ? ` · ${changes.length} tablo değişikliği` : '')
-            + '.');
-    }
+    // Her durumda ne yapıldığı söylenir: aksiyon sayısı 0 çıktığında
+    // sessiz kalıyordu, kullanıcı düğmenin çalışmadığını sanıyordu.
+    const toplamAksiyon = (Object.values(data.failureCauses || {}) as any[])
+        .reduce((n, c) => n + ((c?.actions || []).length), 0);
+    alert(`${aksiyonSatirlari.length} aksiyon kaydı geçmişe eklendi`
+        + (changes.length ? ` · ${changes.length} tablo değişikliği` : '')
+        + '.'
+        + (aksiyonSatirlari.length === 0 && toplamAksiyon > 0
+            ? `\n\nTablodaki ${toplamAksiyon} aksiyonun tamamı ya geçmişte zaten kayıtlı`
+              + ' ya da tarih/açıklama alanı boş.'
+            : '')
+        + `\n\nSürüm: ${BUILD}`);
   };
 
   // Kontrol Planı reaksiyon planı / sorumlusu override (boş → varsayılana döner)
@@ -2202,7 +2213,15 @@ const App: React.FC = () => {
       <div className="print:hidden flex flex-col flex-grow min-h-0">
         <header className="bg-white shadow-md">
           <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-            <h1 className="text-xl font-bold text-blue-700">PFMEA Interactive Editor</h1>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h1 className="text-xl font-bold text-blue-700">PFMEA Interactive Editor</h1>
+              {/* Sürüm damgası: eski bundle önbellekten çalışıyorsa buradan
+                  görülür. Ctrl+Shift+R ile yenilendiğinde tarih değişir. */}
+              <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap"
+                    title="Yayın (build) zamanı — eskiyse Ctrl+Shift+R ile yenileyin">
+                {BUILD}
+              </span>
+            </div>
             <div className="flex items-center space-x-3">
               <button onClick={handleBackToDashboard} className="px-4 py-1.5 text-sm font-semibold rounded-md transition-colors duration-200 text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 shadow-sm">
                   Dashboard
