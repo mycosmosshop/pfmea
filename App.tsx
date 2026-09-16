@@ -626,7 +626,7 @@ const App: React.FC = () => {
         + (s.lokasyon ? `Lokasyon: ${s.lokasyon}${s.ekip ? ` — ${s.ekip}` : ''}\n` : '')
         + `\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
-        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.ara ? `   ·   Ara ürün (yarı mamul): ${s.ozet.ara}` : ''}${s.ozet.elenen ? `  (ağaçta kontrol planı olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
+        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (yarı mamul ve girdi planı olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
         + `Benzer projelerden uyarlanan karakteristik: ${s.ozet.uyarlanan}\n`
         + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)'
             : (s.tarihGuvenilmez ? ` (planda ${s.planTarihiHam} yazıyor — güvenilmez, bugün alındı)` : ' (planda tarih yok — bugün)')}`

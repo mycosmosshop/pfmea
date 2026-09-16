@@ -313,7 +313,7 @@ export function hafizadaAra(hafiza: Hafiza, karakteristik: string): HafizaKayit 
 
 export interface UretimSonuc {
   fmeaData: any;
-  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; ara: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean; agacKalem: number };
+  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean; agacKalem: number };
   urunAdi: string;
   planNo: string;
   planTarihi: string;
@@ -339,25 +339,15 @@ export function girdiSatirlari(kod: string, planlar: any[], cinsi?: any): any[] 
   return g.length ? g : (girdiMalzemeMi(kod, cinsi) ? planlar : []);
 }
 
-// Ağaç "Yarımamul"/"Mamul" diyorsa kalem satın alınmıyor, işletmede
-// üretiliyor: girdi değil ARA ÜRÜN. Cinsi bilinmiyorsa ara ürün sayılmaz
-// (eski davranış korunur).
-export function araUrunMu(cinsi?: any): boolean {
-  const c = met(cinsi).toLocaleLowerCase('tr');
-  return !!c && !GIRDI_CINSLERI.includes(c);
-}
-
-// Bir ağaç kaleminin FMEA'daki karşılığı: hangi tür adım, hangi satırlar.
-// Ara ürünün planı düşmemeli — 30MM BASOTECT'in EN/BOY/PARÇALANMA/PINHOLE
-// karakteristikleri ana planda yok, tek kaynağı bu plan.
+// Bir ağaç kaleminin FMEA'daki karşılığı. YALNIZ satın alınan malzeme
+// (Hamadde / Ambalaj) girdi kontrol adımı açar. Yarı mamul hiç adım
+// açmaz: operasyon kartı yok, prosesi ana rotada (op1/op2 yatay kesim)
+// zaten üretiliyor — ayrı bir adım çift sayım olurdu.
 export function kalemSatirlari(b: any, bomPlan: Record<string, any[]>):
-    { tur: '' | 'girdi' | 'ara'; satir: any[] } {
+    { tur: '' | 'girdi'; satir: any[] } {
   const k = met(b?.tuketim_kodu);
-  const planlar = bomPlan[k] || [];
-  const g = girdiSatirlari(k, planlar, b?.cinsi);
-  if (g.length) return { tur: 'girdi', satir: g };
-  if (araUrunMu(b?.cinsi) && planlar.length) return { tur: 'ara', satir: planlar };
-  return { tur: '', satir: [] };
+  const g = girdiSatirlari(k, bomPlan[k] || [], b?.cinsi);
+  return g.length ? { tur: 'girdi', satir: g } : { tur: '', satir: [] };
 }
 
 export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '', sorumluListe: string[] = [], havuz: string[] = []) {
@@ -375,21 +365,13 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
 
   const adimlar: any[] = [];
 
-  // Hammadde girdi kontrolüne, yarı mamul ara ürün kontrolüne gider.
-  const kalem = (b: any) => kalemSatirlari(b, bomPlan);
-  const bomAdim = bom.map(b => ({ b, k: kalem(b) })).filter(x => x.k.satir.length);
-  bomAdim.filter(x => x.k.tur === 'girdi').forEach(({ b }) => adimlar.push({
-    girdi: true, op: 0, kod: met(b.tuketim_kodu), cinsi: b.cinsi,
-    ad: `Girdi Kalite Kontrol – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
-    mak: 'GKK / FR34-GKK', sembol: 'document',
-  }));
-  // Ara ürünün operasyon kartı yok; onu üreten adım ağaçtan çıkarılamıyor,
-  // bu yüzden op numarası boş bırakılır (uydurulmaz).
-  bomAdim.filter(x => x.k.tur === 'ara').forEach(({ b }) => adimlar.push({
-    girdi: true, ara: true, op: null, kod: met(b.tuketim_kodu), cinsi: b.cinsi,
-    ad: `Ara Ürün Kontrolü – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
-    mak: 'Ara kontrol / FR34', sembol: 'sort',
-  }));
+  // Yalnız satın alınan malzeme girdi adımı açar; yarı mamul açmaz.
+  bom.filter(b => kalemSatirlari(b, bomPlan).satir.length)
+    .forEach(b => adimlar.push({
+      girdi: true, op: 0, kod: met(b.tuketim_kodu), cinsi: b.cinsi,
+      ad: `Girdi Kalite Kontrol – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
+      mak: 'GKK / FR34-GKK', sembol: 'document',
+    }));
   // Urunun KENDI planindaki girdi satirlari (or. disaridan gelen yari mamul)
   const kendiGirdi = plan.filter(x => !!Number(x.giris));
   if (kendiGirdi.length) adimlar.push({
@@ -682,9 +664,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
       karakteristik: Object.keys(fd.processStepFunctions).length,
       hata: Object.keys(fd.failureModes).length,
       neden: Object.keys(fd.failureCauses).length,
-      girdi: bom.filter(b => kalemSatirlari(b, bomPlan).tur === 'girdi').length,
-      ara: bom.filter(b => kalemSatirlari(b, bomPlan).tur === 'ara').length,
-      elenen: bomTum.length - bom.length, planiOlmayan,
+      girdi: bom.length, elenen: bomTum.length - bom.length, planiOlmayan,
       agacKalem: bomTum.length,
       uyarlanan, opKartiYok,
     },

@@ -395,24 +395,21 @@ assert.strictEqual(
   K.girdiSatirlari('9MM.4.601', [{ olculecek: 'a' }], 'Hamadde').length, 1,
   'agac Hamadde diyorsa kod tanimasa da girdi satiri gelir');
 
-// ── Ara urun: plani DUSMEZ, tur degisir ────────────────────────────────
-// 30MM BASOTECT plani EN/BOY/PARCALANMA/PINHOLE tasiyor; ana planda bunlar
-// yok, tek kaynagi bu plan. Girdi adimi olmamali ama silinmemeli de.
-assert.strictEqual(K.araUrunMu('Yarımamul'), true);
-assert.strictEqual(K.araUrunMu('Hamadde'), false);
-assert.strictEqual(K.araUrunMu('Ambalaj Malzemesi'), false);
-assert.strictEqual(K.araUrunMu(''), false, 'cinsi bilinmiyorsa ara urun sayilmaz');
-assert.strictEqual(K.araUrunMu(undefined), false);
+// ── Yari mamul HIC adim acmaz ──────────────────────────────────────────
+// Operasyon karti yok, prosesi ana rotada uretiliyor; ayri adim cift
+// sayim olurdu.
 {
   const bp = { '205.10.9230-2100': [{ olculecek: 'EN' }, { olculecek: 'BOY' }] };
-  const ara = K.kalemSatirlari({ tuketim_kodu: '205.10.9230-2100', cinsi: 'Yarımamul' }, bp);
-  assert.strictEqual(ara.tur, 'ara');
-  assert.strictEqual(ara.satir.length, 2, 'ara urun plani korunmali');
+  assert.strictEqual(
+    K.kalemSatirlari({ tuketim_kodu: '205.10.9230-2100', cinsi: 'Yarımamul' }, bp).tur, '',
+    'yari mamul adim acmaz');
+  assert.strictEqual(
+    K.kalemSatirlari({ tuketim_kodu: '205.10.9230-2100', cinsi: 'Yarımamul' }, bp).satir.length, 0);
   const ham = K.kalemSatirlari({ tuketim_kodu: '909.4.018', cinsi: 'Hamadde' },
     { '909.4.018': [{ olculecek: 'Yogunluk' }] });
   assert.strictEqual(ham.tur, 'girdi');
-  assert.strictEqual(K.kalemSatirlari({ tuketim_kodu: 'x', cinsi: 'Yarımamul' }, {}).tur, '',
-    'plani olmayan ara urun adim acmaz');
+  assert.strictEqual(K.kalemSatirlari({ tuketim_kodu: 'x', cinsi: 'Hamadde' }, {}).tur, '',
+    'plani olmayan hammadde adim acmaz');
 }
 
 // Iskelet: agacta Yarimamul olan kalem adim listesinde YOK
@@ -430,16 +427,9 @@ assert.strictEqual(K.araUrunMu(undefined), false);
   const adlar = Object.values(fdC.processSteps).map(s => s.name);
   assert.ok(adlar.some(a => a === 'Girdi Kalite Kontrol – BASOTECT BLOK (900.4.777)'),
     'hammadde girdi adimi acmali: ' + JSON.stringify(adlar));
-  assert.ok(!adlar.some(a => a.startsWith('Girdi Kalite Kontrol') && a.includes('30MM BASOTECT')),
-    'yari mamul GIRDI adimi acmamali: ' + JSON.stringify(adlar));
-  assert.ok(adlar.some(a => a === 'Ara Ürün Kontrolü – 30MM BASOTECT (205.10.9230-2100)'),
-    'yari mamul ARA URUN adimi acmali: ' + JSON.stringify(adlar));
-  // Ara urunun karakteristigi FMEA'da kalmali (bilgi kaybi olmasin)
-  const kar = Object.values(fdC.processStepFunctions).map(f => f.productCharacteristic);
-  assert.ok(kar.includes('Kalinlik'), 'ara urun karakteristigi dusmemeli: ' + JSON.stringify(kar));
-  // Ara urunun op numarasi UYDURULMAZ (operasyon karti yok)
-  const araAdim = Object.values(fdC.processSteps).find(x => x.name.startsWith('Ara Ürün'));
-  assert.strictEqual(araAdim.operationNumber, '', 'ara urunde op no bos kalmali');
+  assert.ok(!adlar.some(a => a.includes('30MM BASOTECT')),
+    'yari mamul FMEAya hic girmemeli: ' + JSON.stringify(adlar));
+  assert.strictEqual(adlar.length, 2, 'yalniz 1 girdi + 1 operasyon adimi: ' + JSON.stringify(adlar));
 }
 
 const fdYari = K.iskeletUret({ kod: 'X', ad: 'X' },
