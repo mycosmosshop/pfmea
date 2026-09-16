@@ -3,6 +3,7 @@ import type { FmeaData, ModalType, ProcessStep, ProcessStepFunction, FailureMode
 import { erpdenUret, erpUrunListesi, kodListesi as erpKodlari, mevcutProje } from './utils/erpPfmea';
 import { sorumlular, listeGuncelle } from './utils/sorumlular';
 import { diffFmea } from './utils/fmeaDiff';
+import { aksiyonGecmisi } from './utils/actionHistory';
 import FmeaTreeView from './components/FmeaTreeView';
 import FmeaTable from './components/FmeaTable';
 import ControlPlanTable from './components/ControlPlanTable';
@@ -521,6 +522,11 @@ const App: React.FC = () => {
     const yeni: any = createNewProjectState();
     yeni.fmeaData = s.fmeaData;
     yeni.otomatik = true;   // hafiza bu projeden ogrenmesin (kendi ciktisi)
+    // Aksiyon ekranindaki "Responsible" listesi de o lokasyonun ekibi
+    if (s.lokasyon && yeni.registryData) {
+      yeni.registryData = { ...yeni.registryData,
+        responsiblePeople: sorumlular(s.lokasyon) };
+    }
     // FMEA tarihi ve revizyonu KONTROL PLANINDAN gelir (plan revize olduysa
     // FMEA de o tarihe demirlenir); plan tarihi yoksa bugune duser.
     const tarih = s.planTarihi || new Date().toISOString().slice(0, 10);
@@ -534,9 +540,14 @@ const App: React.FC = () => {
         fmeaNumberVersion: [s.planKod, `Rev.${String(s.planRev || '0').padStart(2, '0')}`]
           .filter(Boolean).join(' / '),
         projectId: `proj_${kod.replace(/[.\-]/g, '_')}`,
+        // Ekip lokasyona göre: operasyon kartındaki makinelerden bulunur
+        // (Ankara makinelerinin adında "(ANK)" var). Önce sabit
+        // Çerkezköy ekibi atanıyordu.
+        teamMembers: s.ekip || pd.fmea.teamMembers || '',
       },
       cp: { ...(pd.cp || {}),
         controlPlanNumber: s.planKod || (pd.cp || {}).controlPlanNumber,
+        supplierPlant: s.lokasyon || (pd.cp || {}).supplierPlant || '',
         dateOrig: tarih, dateRev: tarih,
         partNameDescription: s.urunAdi, partNumberChangeLevel: kod,
         notes: `Otomatik üretildi — kaynak: ürün ağacı + operasyon kartı + ${s.planNo}. S/O/D ve aksiyonlar öneridir; ekip doğrulaması gerekir.` },
@@ -547,7 +558,8 @@ const App: React.FC = () => {
         { id: `h_${yeni.id}`, revision: s.planRev || '0', date: tarih,
           changeDescription: `ERP'den otomatik üretildi — ${s.ozet.adim} proses adımı, ${s.ozet.karakteristik} karakteristik`
             + (s.ozet.uyarlanan ? `; ${s.ozet.uyarlanan} karakteristik benzer projelerden uyarlandı` : ''),
-          changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`,
+          changeReason: `Kaynak: ürün ağacı + operasyon kartı + ${s.planNo}`
+            + (s.lokasyon ? ` · lokasyon: ${s.lokasyon}` : ''),
           preparedBy: '', approvedBy: '' },
       ],
     } as any;
@@ -606,9 +618,11 @@ const App: React.FC = () => {
       setProjectData(yeni.projectData);
       setAppView('editor');
       setLeftView('project');
-      alert(`PFMEA üretildi — ${kod}\n\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
+      alert(`PFMEA üretildi — ${kod}\n`
+        + (s.lokasyon ? `Lokasyon: ${s.lokasyon}${s.ekip ? ` — ${s.ekip}` : ''}\n` : '')
+        + `\nProses adımı: ${s.ozet.adim}\nKarakteristik: ${s.ozet.karakteristik}\n`
         + `Hata türü: ${s.ozet.hata}\nHata nedeni (S/O/D + AP + aksiyon): ${s.ozet.neden}\n`
-        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.elenen ? `  (ağaçta girdi olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
+        + `Girdi hammaddesi: ${s.ozet.girdi}${s.ozet.ara ? `   ·   Ara ürün (yarı mamul): ${s.ozet.ara}` : ''}${s.ozet.elenen ? `  (ağaçta kontrol planı olmayan ${s.ozet.elenen} satır elendi)` : ''}\n`
         + `Benzer projelerden uyarlanan karakteristik: ${s.ozet.uyarlanan}\n`
         + `FMEA tarihi: ${tarih}${s.planTarihi ? ' (kontrol planı revizyon tarihi)'
             : (s.tarihGuvenilmez ? ` (planda ${s.planTarihiHam} yazıyor — güvenilmez, bugün alındı)` : ' (planda tarih yok — bugün)')}`
@@ -619,7 +633,7 @@ const App: React.FC = () => {
 
     // Çoklu üretim: panoda kal, satır satır özet ver
     const satir = basarili.map(b =>
-      `✓ ${b.kod} — ${b.s.ozet.adim} adım, ${b.s.ozet.karakteristik} karakteristik, ${b.s.ozet.neden} neden`
+      `✓ ${b.kod} · ${b.s.lokasyon} — ${b.s.ozet.adim} adım, ${b.s.ozet.karakteristik} karakteristik, ${b.s.ozet.neden} neden`
       + (b.s.ozet.planiOlmayan ? `  (${b.s.ozet.planiOlmayan} hammaddede girdi planı yok)` : '')
       + (b.s.ozet.opKartiYok ? '  (operasyon kartı yok — adımlar plandan)' : '')
       + (b.s.tarihGuvenilmez ? `  (plan tarihi ${b.s.planTarihiHam} güvenilmez — bugün alındı)` : ''));
@@ -728,30 +742,50 @@ const App: React.FC = () => {
     }
     const baseline = projectData.historyBaseline;
     const changes = diffFmea(baseline, data);
-    if (changes.length === 0) {
-        alert("Son revizyon kaydından beri tabloda bir değişiklik tespit edilmedi.");
+
+    // ── Aksiyon kayıtları ──
+    // Her aksiyonun kendi tarihi ve sorumlusu var; değişiklik bugün
+    // değil O TARİHTE yapıldı. Mantık utils/actionHistory.ts'te —
+    // saf fonksiyon olduğu için testi var.
+    const aksiyonSatirlari = aksiyonGecmisi(data, currentHistory, {
+        revision: projectData.fmea.fmeaNumberVersion || '',
+        hazirlayan: projectData.fmea.fmeaCreator || '',
+        onaylayan: projectData.fmea.fmeaApprover || '',
+    });
+
+    if (changes.length === 0 && aksiyonSatirlari.length === 0) {
+        alert("Son revizyon kaydından beri tabloda bir değişiklik ve "
+            + "geçmişe eklenecek yeni aksiyon tespit edilmedi.");
         return;
     }
-    const MAX = 80;
-    let desc = changes.slice(0, MAX).join('\n');
-    if (changes.length > MAX) desc += `\n… (+${changes.length - MAX} değişiklik daha)`;
 
-    const entry: HistoryEntry = {
-        id: `h_${Date.now().toString(36)}`,
-        revision: projectData.fmea.fmeaNumberVersion || String(currentHistory.length),
-        date: new Date().toISOString().slice(0, 10),
-        changeDescription: desc,
-        changeReason: '',
-        preparedBy: projectData.fmea.fmeaCreator || '',
-        approvedBy: projectData.fmea.fmeaApprover || '',
-    };
+    const yeniSatirlar: HistoryEntry[] = [...aksiyonSatirlari];
+    if (changes.length > 0) {
+        const MAX = 80;
+        let desc = changes.slice(0, MAX).join('\n');
+        if (changes.length > MAX) desc += `\n… (+${changes.length - MAX} değişiklik daha)`;
+        yeniSatirlar.push({
+            id: `h_${Date.now().toString(36)}`,
+            revision: projectData.fmea.fmeaNumberVersion || String(currentHistory.length),
+            date: new Date().toISOString().slice(0, 10),
+            changeDescription: desc,
+            changeReason: '',
+            preparedBy: projectData.fmea.fmeaCreator || '',
+            approvedBy: projectData.fmea.fmeaApprover || '',
+        });
+    }
 
     const newProjectData: ProjectData = {
         ...projectData,
-        history: [...currentHistory, entry],
+        history: [...currentHistory, ...yeniSatirlar],
         historyBaseline: JSON.parse(JSON.stringify(data)), // yeni temel = mevcut durum
     };
     await handleProjectDataSave(newProjectData);
+    if (aksiyonSatirlari.length) {
+        alert(`${aksiyonSatirlari.length} aksiyon kaydı geçmişe eklendi`
+            + (changes.length ? ` · ${changes.length} tablo değişikliği` : '')
+            + '.');
+    }
   };
 
   // Kontrol Planı reaksiyon planı / sorumlusu override (boş → varsayılana döner)

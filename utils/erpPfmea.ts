@@ -11,7 +11,8 @@
 // izlenebilsin diye. Hata türleri/etkiler iskelet olarak açılır; ekip doldurur.
 
 import { initialApMatrix } from './ap-matrix';
-import { sorumlular, atamaHavuzu, atananSorumlu } from './sorumlular';
+import { sorumlular, atamaHavuzu, atananSorumlu, lokasyonBul, EKIP }
+  from './sorumlular';
 
 const SUPABASE_URL = 'https://nnubrxbpthmkitueixbh.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5udWJyeGJwdGhta2l0dWVpeGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1NjI2MDIsImV4cCI6MjA5NjEzODYwMn0.CHZUOylf_q8kkOQbFf9VWZ6-doUTlynmAhahM2EuImE';
@@ -31,11 +32,18 @@ const metinS = (x: any) => { const t = met(x); return t === '0' ? '' : t; };
 const buyuk = (x: any) => met(x).toLocaleUpperCase('tr');
 
 // ── Girdi hammaddesi ayrımı ───────────────────────────────────────────────
-// Girdi kalite kontrolüne tabi malzemeler stok kodunun ORTA parçasından
-// ayrılır: 909.4.018 / 952.10.004 girdi hammaddesi; 205.0.214-C işletmede
-// üretilen mamul olduğu için girdi kontrol adımı açılmaz.
+// Ürün ağacındaki `cinsi` alanı ne olduğunu doğrudan söyler:
+// Hamadde / Ambalaj Malzemesi satın alınır → girdi kalite kontrolü açılır.
+// Yarımamul / Mamul işletmede üretilir → girdi adımı AÇILMAZ; prosesi
+// rotada zaten var, girdi adımı açmak çift sayım olur.
+export const GIRDI_CINSLERI = ['hamadde', 'ambalaj malzemesi'];
+// Ağaçta cinsi boş olan 1.677 kalem için yedek: stok kodunun ORTA parçası
+// (909.4.018 / 952.10.004 girdi; 205.0.214-C mamul). Tek başına güvenilmez —
+// 1.616 kalemde ağaçla çelişiyor — bu yüzden yalnız cinsi yokken kullanılır.
 export const GIRDI_ORTA_KODLAR = ['4', '10'];
-export function girdiMalzemeMi(kod: any): boolean {
+export function girdiMalzemeMi(kod: any, cinsi?: any): boolean {
+  const c = met(cinsi).toLocaleLowerCase('tr');
+  if (c) return GIRDI_CINSLERI.includes(c);
   const m = met(kod).match(/^\s*\d+\s*\.\s*(\d+)\s*\./);
   return !!m && GIRDI_ORTA_KODLAR.includes(m[1]);
 }
@@ -305,7 +313,7 @@ export function hafizadaAra(hafiza: Hafiza, karakteristik: string): HafizaKayit 
 
 export interface UretimSonuc {
   fmeaData: any;
-  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean; agacKalem: number };
+  ozet: { adim: number; karakteristik: number; hata: number; neden: number; girdi: number; ara: number; elenen: number; planiOlmayan: number; uyarlanan: number; opKartiYok: boolean; agacKalem: number };
   urunAdi: string;
   planNo: string;
   planTarihi: string;
@@ -313,6 +321,8 @@ export interface UretimSonuc {
   planRev: string;
   planTarihiHam: string;      // plandaki ham deger (guvenilmez olsa da)
   tarihGuvenilmez: boolean;   // ham deger vardi ama kullanilmadi
+  lokasyon: string;           // operasyon kartindan bulunan uretim yeri
+  ekip: string;               // o lokasyonun ekibi (FMEA "Team members")
 }
 
 // ── İskelet üretici (saf: test edilebilir) ────────────────────────────────
@@ -320,9 +330,34 @@ export interface UretimSonuc {
 // bayragi isaretler; bayrak varsa o satirlar esastir. Bayrak hic kullanilmamis
 // eski planlarda, kod kurali hammadde diyorsa planin tamami girdi sayilir -
 // yari mamulun kendi proses plani yanlislikla girdi adimina donmesin diye.
-export function girdiSatirlari(kod: string, planlar: any[]): any[] {
+export function girdiSatirlari(kod: string, planlar: any[], cinsi?: any): any[] {
+  // Yarı mamulün kendi proses planı girdi adımına dönmesin: ağaç
+  // "Yarımamul" diyorsa `giris` bayrağı da olsa girdi sayılmaz.
+  const c = met(cinsi).toLocaleLowerCase('tr');
+  if (c && !GIRDI_CINSLERI.includes(c)) return [];
   const g = planlar.filter(x => !!Number(x.giris));
-  return g.length ? g : (girdiMalzemeMi(kod) ? planlar : []);
+  return g.length ? g : (girdiMalzemeMi(kod, cinsi) ? planlar : []);
+}
+
+// Ağaç "Yarımamul"/"Mamul" diyorsa kalem satın alınmıyor, işletmede
+// üretiliyor: girdi değil ARA ÜRÜN. Cinsi bilinmiyorsa ara ürün sayılmaz
+// (eski davranış korunur).
+export function araUrunMu(cinsi?: any): boolean {
+  const c = met(cinsi).toLocaleLowerCase('tr');
+  return !!c && !GIRDI_CINSLERI.includes(c);
+}
+
+// Bir ağaç kaleminin FMEA'daki karşılığı: hangi tür adım, hangi satırlar.
+// Ara ürünün planı düşmemeli — 30MM BASOTECT'in EN/BOY/PARÇALANMA/PINHOLE
+// karakteristikleri ana planda yok, tek kaynağı bu plan.
+export function kalemSatirlari(b: any, bomPlan: Record<string, any[]>):
+    { tur: '' | 'girdi' | 'ara'; satir: any[] } {
+  const k = met(b?.tuketim_kodu);
+  const planlar = bomPlan[k] || [];
+  const g = girdiSatirlari(k, planlar, b?.cinsi);
+  if (g.length) return { tur: 'girdi', satir: g };
+  if (araUrunMu(b?.cinsi) && planlar.length) return { tur: 'ara', satir: planlar };
+  return { tur: '', satir: [] };
 }
 
 export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota: any[], plan: any[], bomPlan: Record<string, any[]>, kaynakNot: string, hafiza: Hafiza = {}, planTarihi = '', sorumluListe: string[] = [], havuz: string[] = []) {
@@ -340,13 +375,21 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
 
   const adimlar: any[] = [];
 
-  const girdiSatir = (k: string) => girdiSatirlari(k, bomPlan[k] || []);
-  bom.filter(b => girdiSatir(met(b.tuketim_kodu)).length)
-    .forEach(b => adimlar.push({
-      girdi: true, op: 0, kod: met(b.tuketim_kodu),
-      ad: `Girdi Kalite Kontrol – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
-      mak: 'GKK / FR34-GKK', sembol: 'document',
-    }));
+  // Hammadde girdi kontrolüne, yarı mamul ara ürün kontrolüne gider.
+  const kalem = (b: any) => kalemSatirlari(b, bomPlan);
+  const bomAdim = bom.map(b => ({ b, k: kalem(b) })).filter(x => x.k.satir.length);
+  bomAdim.filter(x => x.k.tur === 'girdi').forEach(({ b }) => adimlar.push({
+    girdi: true, op: 0, kod: met(b.tuketim_kodu), cinsi: b.cinsi,
+    ad: `Girdi Kalite Kontrol – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
+    mak: 'GKK / FR34-GKK', sembol: 'document',
+  }));
+  // Ara ürünün operasyon kartı yok; onu üreten adım ağaçtan çıkarılamıyor,
+  // bu yüzden op numarası boş bırakılır (uydurulmaz).
+  bomAdim.filter(x => x.k.tur === 'ara').forEach(({ b }) => adimlar.push({
+    girdi: true, ara: true, op: null, kod: met(b.tuketim_kodu), cinsi: b.cinsi,
+    ad: `Ara Ürün Kontrolü – ${met(b.tuketim_adi)} (${met(b.tuketim_kodu)})`,
+    mak: 'Ara kontrol / FR34', sembol: 'sort',
+  }));
   // Urunun KENDI planindaki girdi satirlari (or. disaridan gelen yari mamul)
   const kendiGirdi = plan.filter(x => !!Number(x.giris));
   if (kendiGirdi.length) adimlar.push({
@@ -384,7 +427,8 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
     fd.processItems[itemId].stepIds.push(sid);
 
     const maddeler: any[] = a.girdi
-      ? (a.kendi ? kendiGirdi : girdiSatir(a.kod))
+      ? (a.kendi ? kendiGirdi
+                 : kalemSatirlari({ tuketim_kodu: a.kod, cinsi: a.cinsi }, bomPlan).satir)
       : plan.filter(x => !Number(x.giris) && opNo(x.op_no) === a.op);
 
     // Akis semasi ADIM bazlidir: sembol adimda yalniz ilk karakteristige
@@ -516,13 +560,17 @@ async function ajanTazele(yol: string, kod: string): Promise<void> {
 export async function agacDuz(kok: string, oku: (k: string[]) => Promise<any[]> = agacOku,
                              tazele: (y: string, k: string) => Promise<void> = ajanTazele): Promise<any[]> {
   const gorulen = new Set<string>([met(kok)]);
+  // Bir kalemin cinsi, onu tüketen ÜST satırda yazar; seviye ilerlerken
+  // taşınmalı, yoksa ağaç çekme kararı yine kod kuralına düşer.
+  const cins = new Map<string, any>();
   const sonuc: any[] = [];
   let seviye = [met(kok)];
   for (let derinlik = 0; derinlik < 8 && seviye.length; derinlik++) {
     let satir = await oku(seviye);
     // Hammaddenin agaci zaten olmaz; yalniz yari mamul/mamul icin cekilir
     // (yoksa her yaprak icin ayri ayri LeanSys cagrisi yapiliyordu).
-    const bosalanlar = seviye.filter(k => !girdiMalzemeMi(k) && !satir.some(b => met(b.urun_kodu) === k));
+    const bosalanlar = seviye.filter(k => !girdiMalzemeMi(k, cins.get(k))
+      && !satir.some(b => met(b.urun_kodu) === k));
     if (bosalanlar.length) {                      // agaci ERP'de yok - LeanSys'ten cek
       await tazele('refreshbom', bosalanlar.join(','));
       satir = await oku(seviye);
@@ -531,7 +579,7 @@ export async function agacDuz(kok: string, oku: (k: string[]) => Promise<any[]> 
     satir.filter(b => b.varsayilan !== false).forEach(b => {
       const k = met(b.tuketim_kodu);
       if (!k || gorulen.has(k)) return;           // dongu ve tekrar korumasi
-      gorulen.add(k); sonuc.push(b); sonraki.push(k);
+      gorulen.add(k); cins.set(k, b.cinsi); sonuc.push(b); sonraki.push(k);
     });
     seviye = sonraki;
   }
@@ -542,7 +590,7 @@ async function agacOku(kodlar: string[]): Promise<any[]> {
   const cikti: any[] = [];
   for (let i = 0; i < kodlar.length; i += 40) {
     const liste = kodlar.slice(i, i + 40).map(c => `"${c}"`).join(',');
-    cikti.push(...await sorgu(`urun_agaclari?select=urun_kodu,tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=in.(${encodeURIComponent(liste)})`));
+    cikti.push(...await sorgu(`urun_agaclari?select=urun_kodu,tuketim_kodu,tuketim_adi,cinsi,varsayilan&urun_kodu=in.(${encodeURIComponent(liste)})`));
   }
   return cikti;
 }
@@ -572,7 +620,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   const kod = encodeURIComponent(stokKodu);
   let [bomHam, rotaHam, planHam] = await Promise.all([
     sorgu(`urun_agaclari?select=tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=eq.${kod}`),
-    sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
+    sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,makine_grup,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
     sorgu(`leansys_kontrol_plani?select=*&stok_kodu=eq.${kod}`),
   ]);
   // Eksik olan neyse LeanSys'ten cekilir, sonra yeniden okunur
@@ -584,7 +632,7 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
     await Promise.all(eksik);
     const [b2, r2, p2] = await Promise.all([
       bomHam.length ? Promise.resolve(bomHam) : sorgu(`urun_agaclari?select=tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=eq.${kod}`),
-      rotaHam.length ? Promise.resolve(rotaHam) : sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
+      rotaHam.length ? Promise.resolve(rotaHam) : sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,makine_grup,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
       planHam.length ? Promise.resolve(planHam) : sorgu(`leansys_kontrol_plani?select=*&stok_kodu=eq.${kod}`),
     ]);
     bomHam = b2; rotaHam = r2; planHam = p2;
@@ -601,9 +649,9 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
     ? await planlariOku([...new Set(bomTum.map(b => met(b.tuketim_kodu)).filter(Boolean))])
     : {};
   // Girdi kontrolu olan kalemler FMEA'ya girer (kural: girdiSatirlari)
-  const bom = bomTum.filter(b => girdiSatirlari(met(b.tuketim_kodu), bomPlan[met(b.tuketim_kodu)] || []).length);
-  // Kod kurali hammadde diyor ama hicbir plani yok - uyarilmali
-  const planiOlmayan = bomTum.filter(b => girdiMalzemeMi(b.tuketim_kodu)
+  const bom = bomTum.filter(b => kalemSatirlari(b, bomPlan).satir.length);
+  // Hammadde ama hicbir girdi plani yok - uyarilmali
+  const planiOlmayan = bomTum.filter(b => girdiMalzemeMi(b.tuketim_kodu, b.cinsi)
     && !(bomPlan[met(b.tuketim_kodu)] || []).length).length;
   const opKartiYok = !rotaHam.length;
 
@@ -614,7 +662,11 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   // Mevcut projelerden ogren (hata turu, etki, siddet, nedenler, aksiyonlar)
   let hafiza: Hafiza = {};
   try { hafiza = await hafizaYukle(); } catch { /* hafiza okunamazsa kurallarla devam */ }
-  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi, sorumlular('Çerkezköy'), atamaHavuzu('Çerkezköy'));
+  // Lokasyon SABIT 'Çerkezköy' yaziliydi: Ankara urununde bile
+  // Cerkezkoy ekibi atanyordu. Operasyon karti lokasyonu soyluyor
+  // (Ankara makinelerinin adinda "(ANK)" var).
+  const lokasyon = lokasyonBul(rota);
+  const fd = iskeletUret({ kod: stokKodu, ad: urunAdi }, bom, rota, planHam, bomPlan, `kontrol planı (${planNo})`, hafiza, planTarihi, sorumlular(lokasyon), atamaHavuzu(lokasyon));
   // Kac karakteristik hafizadan uyarlandi (ozet mesaji icin)
   const uyarlanan = Object.values<any>(fd.processStepFunctions)
     .filter(f => hafizadaAra(hafiza, f.productCharacteristic)).length;
@@ -622,12 +674,17 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
   return {
     fmeaData: fd, urunAdi, planNo, planTarihi, planTarihiHam, tarihGuvenilmez,
     planKod: met(ilk.plan_no), planRev: met(ilk.rev_no),
+    // Cagiran taraf FMEA kunyesine yazsin: sorumlu listesi ve "Team
+    // members" alani lokasyonun ekibi olmali.
+    lokasyon, ekip: EKIP[lokasyon === 'Ankara' ? 'ankara' : 'cerkezkoy'] || '',
     ozet: {
       adim: Object.keys(fd.processSteps).length,
       karakteristik: Object.keys(fd.processStepFunctions).length,
       hata: Object.keys(fd.failureModes).length,
       neden: Object.keys(fd.failureCauses).length,
-      girdi: bom.length, elenen: bomTum.length - bom.length, planiOlmayan,
+      girdi: bom.filter(b => kalemSatirlari(b, bomPlan).tur === 'girdi').length,
+      ara: bom.filter(b => kalemSatirlari(b, bomPlan).tur === 'ara').length,
+      elenen: bomTum.length - bom.length, planiOlmayan,
       agacKalem: bomTum.length,
       uyarlanan, opKartiYok,
     },

@@ -367,6 +367,81 @@ assert.strictEqual(K.girdiSatirlari('203.20.413', [{ olculecek: 'a', giris: 1 },
   'giris bayragi varsa yari mamul de girdi adimi alir, yalniz giris satirlariyla');
 assert.strictEqual(K.girdiSatirlari('909.4.018', []).length, 0, 'plani yoksa adim acilmaz');
 
+// ── cinsi: agac ne diyorsa o (kod kurali yalniz yedek) ──────────────────
+// 205.10.9230-2100 "30MM BASOTECT" kodun orta parcasi 10 oldugu icin girdi
+// hammaddesi saniliyordu; agacta cinsi = Yarimamul. Kendi urettigimiz yari
+// mamule girdi kontrol adimi acilmaz — prosesi rotada zaten var.
+assert.strictEqual(K.girdiMalzemeMi('205.10.9230-2100'), true,
+  'cinsi verilmezse eski kod kurali surer');
+assert.strictEqual(K.girdiMalzemeMi('205.10.9230-2100', 'Yarımamul'), false,
+  'agac Yarimamul diyorsa girdi degil');
+assert.strictEqual(K.girdiMalzemeMi('205.10.6984', 'Mamul'), false);
+assert.strictEqual(K.girdiMalzemeMi('9MM.4.601', 'Hamadde'), true,
+  'kod kurali tanimasa da agac Hamadde diyorsa girdi');
+assert.strictEqual(K.girdiMalzemeMi('HOPO8-90.BH 80', 'Hamadde'), true);
+assert.strictEqual(K.girdiMalzemeMi('952.4.039', 'Ambalaj Malzemesi'), true);
+assert.strictEqual(K.girdiMalzemeMi('205.0.214-C', ''), false,
+  'cinsi bos string ise kod kuralina duser');
+
+// Yari mamulun kendi proses plani girdi adimina donmemeli — `giris`
+// bayragi tasisa bile.
+assert.strictEqual(
+  K.girdiSatirlari('205.10.9230-2100', [{ olculecek: 'a' }], 'Yarımamul').length, 0,
+  'yari mamul plani girdi adimi acmaz');
+assert.strictEqual(
+  K.girdiSatirlari('205.10.9230-2100', [{ olculecek: 'a', giris: 1 }], 'Yarımamul').length, 0,
+  'yari mamulde giris bayragi da girdi yapmaz');
+assert.strictEqual(
+  K.girdiSatirlari('9MM.4.601', [{ olculecek: 'a' }], 'Hamadde').length, 1,
+  'agac Hamadde diyorsa kod tanimasa da girdi satiri gelir');
+
+// ── Ara urun: plani DUSMEZ, tur degisir ────────────────────────────────
+// 30MM BASOTECT plani EN/BOY/PARCALANMA/PINHOLE tasiyor; ana planda bunlar
+// yok, tek kaynagi bu plan. Girdi adimi olmamali ama silinmemeli de.
+assert.strictEqual(K.araUrunMu('Yarımamul'), true);
+assert.strictEqual(K.araUrunMu('Hamadde'), false);
+assert.strictEqual(K.araUrunMu('Ambalaj Malzemesi'), false);
+assert.strictEqual(K.araUrunMu(''), false, 'cinsi bilinmiyorsa ara urun sayilmaz');
+assert.strictEqual(K.araUrunMu(undefined), false);
+{
+  const bp = { '205.10.9230-2100': [{ olculecek: 'EN' }, { olculecek: 'BOY' }] };
+  const ara = K.kalemSatirlari({ tuketim_kodu: '205.10.9230-2100', cinsi: 'Yarımamul' }, bp);
+  assert.strictEqual(ara.tur, 'ara');
+  assert.strictEqual(ara.satir.length, 2, 'ara urun plani korunmali');
+  const ham = K.kalemSatirlari({ tuketim_kodu: '909.4.018', cinsi: 'Hamadde' },
+    { '909.4.018': [{ olculecek: 'Yogunluk' }] });
+  assert.strictEqual(ham.tur, 'girdi');
+  assert.strictEqual(K.kalemSatirlari({ tuketim_kodu: 'x', cinsi: 'Yarımamul' }, {}).tur, '',
+    'plani olmayan ara urun adim acmaz');
+}
+
+// Iskelet: agacta Yarimamul olan kalem adim listesinde YOK
+{
+  const bomKarisik = [
+    { tuketim_kodu: '900.4.777', tuketim_adi: 'BASOTECT BLOK', cinsi: 'Hamadde' },
+    { tuketim_kodu: '205.10.9230-2100', tuketim_adi: '30MM BASOTECT', cinsi: 'Yarımamul' },
+  ];
+  const planlar = {
+    '900.4.777': [{ olculecek: 'Yogunluk', hedef_nicel: '9', op_no: 0 }],
+    '205.10.9230-2100': [{ olculecek: 'Kalinlik', hedef_nicel: '30', op_no: 0 }],
+  };
+  const fdC = K.iskeletUret({ kod: '216.0.367', ad: 'Test' }, bomKarisik,
+    [{ op_no: 1, makine_adi: 'YATAY KESIM' }], [], planlar, 'test');
+  const adlar = Object.values(fdC.processSteps).map(s => s.name);
+  assert.ok(adlar.some(a => a === 'Girdi Kalite Kontrol – BASOTECT BLOK (900.4.777)'),
+    'hammadde girdi adimi acmali: ' + JSON.stringify(adlar));
+  assert.ok(!adlar.some(a => a.startsWith('Girdi Kalite Kontrol') && a.includes('30MM BASOTECT')),
+    'yari mamul GIRDI adimi acmamali: ' + JSON.stringify(adlar));
+  assert.ok(adlar.some(a => a === 'Ara Ürün Kontrolü – 30MM BASOTECT (205.10.9230-2100)'),
+    'yari mamul ARA URUN adimi acmali: ' + JSON.stringify(adlar));
+  // Ara urunun karakteristigi FMEA'da kalmali (bilgi kaybi olmasin)
+  const kar = Object.values(fdC.processStepFunctions).map(f => f.productCharacteristic);
+  assert.ok(kar.includes('Kalinlik'), 'ara urun karakteristigi dusmemeli: ' + JSON.stringify(kar));
+  // Ara urunun op numarasi UYDURULMAZ (operasyon karti yok)
+  const araAdim = Object.values(fdC.processSteps).find(x => x.name.startsWith('Ara Ürün'));
+  assert.strictEqual(araAdim.operationNumber, '', 'ara urunde op no bos kalmali');
+}
+
 const fdYari = K.iskeletUret({ kod: 'X', ad: 'X' },
   [{ tuketim_kodu: '203.20.413', tuketim_adi: 'YARI MAMUL' },
    { tuketim_kodu: '944.4.KFR30-065-1', tuketim_adi: 'FR KROS' }],

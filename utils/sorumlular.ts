@@ -1,6 +1,9 @@
 // Lokasyona göre aksiyon sorumluları. Aksiyon ekranındaki "Responsible"
 // listesi projenin kayıt defterinden gelir; proje açılışında ve lokasyon
 // değişiminde bu listelerle doldurulur.
+const duz = (x: any) => String(x ?? '').toLocaleLowerCase('tr')
+  .replace(/[ıİ]/g, 'i').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u');
+
 const ORTAK = [
   'Necmettin Altıntaş', 'Sinem Kaya', 'Emrah Eryılmaz', 'Ünal Ürkmez',
   'Gökhan Öztekin', 'Adnan Semiz', 'K.Altıparmak', 'Volkan Pekatik',
@@ -8,11 +11,54 @@ const ORTAK = [
 
 export const SORUMLULAR: Record<string, string[]> = {
   cerkezkoy: [...ORTAK, 'Umut Çiftçiogulları'],
-  ankara: [...ORTAK, 'Emre Biçer', 'Mete Yılmaz'],
+  ankara: [...ORTAK, 'Emre Biçer', 'Mete Yılmaz', 'Taner Şeşenoğlu',
+           'Hasan Köse', 'Nagihan Şeşenoğlu'],
 };
 
-const duz = (x: any) => String(x ?? '').toLocaleLowerCase('tr')
-  .replace(/[ıİ]/g, 'i').replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u');
+/** Lokasyonun ekibi — unvanlarıyla (FMEA "Team members" alanı için). */
+export const EKIP: Record<string, string> = {
+  ankara: 'Mete Yılmaz (Fabrika Müdürü), Emre Biçer (Kalite Mühendisi), '
+        + 'Taner Şeşenoğlu (Üretim Sorumlusu), Hasan Köse (Bakım), '
+        + 'Nagihan Şeşenoğlu (Ar-Ge ve Planlama)',
+  cerkezkoy: '',
+};
+
+// ERP'deki şube adları (operasyon_kartlari.makine_grup) → kısa ad.
+const SUBELER: [string, string][] = [
+  ['ankara', 'Ankara'], ['cerkezkoy', 'Çerkezköy'],
+  ['eskisehir', 'Eskişehir'], ['velikoy', 'Veliköy'],
+];
+
+/**
+ * ERP operasyon kartından üretim yerini bulur.
+ *
+ * Kaynak makine_grup sütunu ("ANKARA SUBESI", "ÇERKEZKÖY TEKNIK").
+ * Rota birden çok şubeye değiyorsa çoğunluk kazanır — 700.0.570-A gibi
+ * ürünlerde araya tek bir Çerkezköy makinesi girebiliyor.
+ *
+ * Grup boşsa makine adındaki "(ANK)" izine düşülür; o da yoksa merkez
+ * (Çerkezköy) — eski davranış. Adda iz yalnız 3 makinede var, bu yüzden
+ * yedek; birincil kaynak grup sütunu.
+ */
+export function lokasyonBul(rota: any[] | undefined): string {
+  const say = new Map<string, number>();
+  (rota || []).forEach((r: any) => {
+    const g = duz(r?.makine_grup);
+    const bulunan = SUBELER.find(([anahtar]) => g.includes(anahtar));
+    if (bulunan) say.set(bulunan[1], (say.get(bulunan[1]) || 0) + 1);
+  });
+  if (say.size) {
+    return [...say].sort((a, b) => b[1] - a[1])[0][0];
+  }
+  const iz = (rota || []).some((r: any) => {
+    const s = duz(`${r?.makine_adi ?? ''} ${r?.makine_kodu ?? ''} `
+      + `${r?.rota_adi ?? ''}`);
+    return /\(ank\)|\bank\b|ankara/.test(s);
+  });
+  return iz ? 'Ankara' : 'Çerkezköy';
+}
+
+
 
 // Lokasyon adından liste seçer; tanınmayan lokasyon Çerkezköy'e düşer (merkez).
 export function sorumlular(lokasyon: any): string[] {
