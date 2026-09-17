@@ -2,6 +2,8 @@
 // FmeaTable, AiagViewTable, ControlPlanTable ve FlowDiagramView aynı antet/stili paylaşır.
 // xlsx-js-style (XLSX global) hücre stillerini (renk/dolgu/kenarlık) korur.
 
+import { drawingEkle } from './flowDrawing';
+
 declare const XLSX: any;
 
 export const encCell = (r: number, c: number): string => XLSX.utils.encode_cell({ r, c });
@@ -99,8 +101,12 @@ export function writeProjectInfoLine(ws: { [k: string]: any }, merges: any[], ro
   return row + 2; // bilgi satırı + 1 boş satır
 }
 
+declare const JSZip: any;
+
 // !merges, !cols, !ref ayarlar ve dosyayı indirir.
-export function finalizeAndDownload(ws: { [k: string]: any }, merges: any[], colWidths: number[], lastCol: number, lastRow: number, sheetName: string, fileName: string): void {
+// drawingXml verilirse (akış şeması şekilleri) paket JSZip ile açılıp drawing eklenir;
+// xlsx-js-style şekil yazamadığı için bu sonradan-ekleme tek yol.
+export function finalizeAndDownload(ws: { [k: string]: any }, merges: any[], colWidths: number[], lastCol: number, lastRow: number, sheetName: string, fileName: string, drawingXml?: string): void {
   // Boş kalan tüm hücreleri ince kenarlıkla doldur — tabloda hiçbir yerde çizgi eksiği kalmasın.
   for (let r = 0; r <= lastRow; r++) {
     for (let c = 0; c <= lastCol; c++) {
@@ -113,7 +119,20 @@ export function finalizeAndDownload(ws: { [k: string]: any }, merges: any[], col
   ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: lastCol, r: lastRow } });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  XLSX.writeFile(wb, fileName);
+  if (!drawingXml || typeof JSZip === 'undefined') {
+    if (drawingXml) console.warn('JSZip yüklü değil — akış şeması şekilsiz indiriliyor');
+    XLSX.writeFile(wb, fileName);
+    return;
+  }
+  (async () => {
+    const paket = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const zip = await JSZip.loadAsync(paket);
+    await drawingEkle(zip, drawingXml);
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = fileName; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  })().catch(e => { console.error('Şekilli dışa aktarma başarısız, şekilsiz indiriliyor', e); XLSX.writeFile(wb, fileName); });
 }
 
 export const apFillFor = (ap?: any) => {

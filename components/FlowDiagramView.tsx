@@ -3,6 +3,7 @@ import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { SvgIconRenderer } from './icons/Icons';
 import { encCell, writeSanifoamAntet, writeProjectInfoLine, finalizeAndDownload, headerBandStyle, bodyStyle, bodyCenterStyle, zebraFill } from '../utils/excelExport';
+import { flowDrawingXml, Sekil, Ok } from '../utils/flowDrawing';
 
 declare const jspdf: any;
 
@@ -322,6 +323,11 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             });
         });
 
+        // Sembol hücresine gerçek şekil, ardışık şekiller arasına ok (web görünümündeki gibi).
+        const sekiller: Sekil[] = [];
+        const oklar: Ok[] = [];
+        const SEMBOL_SATIR_PT = 34;
+        ws['!rows'] = ws['!rows'] || [];
         let isZebra = false;
         let lastStep: string | null = null;
         flowRows.forEach(({ step, func, first, span }) => {
@@ -335,10 +341,16 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
             } else {
                 ws[encCell(rowIndex, 0)] = { v: '', t: 's', s: z(bodyCenterStyle) };
             }
-            // Sembol kolonları: eşleşen sembolde ●
+            // Sembol kolonları boş hücre; şekil drawing katmanında hücrenin üstüne çizilir
             symbols.forEach((s, i) => {
-                ws[encCell(rowIndex, i + 1)] = { v: func.flowchartSymbol === s.key ? '●' : '', t: 's', s: z(bodyCenterStyle) };
+                ws[encCell(rowIndex, i + 1)] = { v: '', t: 's', s: z(bodyCenterStyle) };
+                if (func.flowchartSymbol === s.key) {
+                    const onceki = sekiller[sekiller.length - 1];
+                    sekiller.push({ col: i + 1, row: rowIndex, key: s.key });
+                    if (onceki) oklar.push({ fromCol: onceki.col, fromRow: onceki.row, toCol: i + 1, toRow: rowIndex });
+                }
             });
+            ws['!rows'][rowIndex] = { hpt: SEMBOL_SATIR_PT };
             ws[encCell(rowIndex, COL_OZEL)] = { v: clsText(clsSym(func, step, 'classificationSymbolBefore')), t: 's', s: z(bodyCenterStyle) };
             ws[encCell(rowIndex, COL_IYI)] = { v: clsText(clsSym(func, step, 'classificationSymbolAfter')), t: 's', s: z(bodyCenterStyle) };
             ws[encCell(rowIndex, COL_ACIK)] = { v: func.processDescription || func.name || '', t: 's', s: z(bodyStyle) };
@@ -346,7 +358,8 @@ const FlowDiagramView: React.FC<FlowDiagramViewProps> = ({ data, registryData, p
         });
 
         const cols = [10, ...symbols.map(() => 8), 16, 18, 42];
-        finalizeAndDownload(ws, merges, cols, LAST, rowIndex - 1, 'Flow', `${fmea.project || 'fmea'}-Flow-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        const drawing = flowDrawingXml(sekiller, oklar, cols, r => ws['!rows'][r]?.hpt ?? 15);
+        finalizeAndDownload(ws, merges, cols, LAST, rowIndex - 1, 'Flow', `${fmea.project || 'fmea'}-Flow-${new Date().toISOString().slice(0, 10)}.xlsx`, drawing);
     };
 
     // --- Akış Şeması -> PDF (gerçek şekiller + bağlantı okları, antetli) ---
