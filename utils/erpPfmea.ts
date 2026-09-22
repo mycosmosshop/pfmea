@@ -696,9 +696,18 @@ export function mevcutProje(projeler: any[], kod: any): any | null {
   const k = met(kod);
   if (!k) return null;
   const kimlik = projeKimligi(k);
-  const ad = buyuk(`${k} PFMEA`);
+  const K = buyuk(k);
   return projeler.find(p => {
     const f = p?.projectData?.fmea || {};
-    return met(f.projectId) === kimlik || buyuk(f.project) === ad;
+    if (met(f.projectId) === kimlik) return true;
+    // Eslesme YALNIZ "<kod> PFMEA" adina bakiyordu. Projeler musteri parca
+    // numarasiyla adlandirilabiliyor ("83.72010-6191 INDEX A PFMEA"), stok
+    // kodu ise urun adinda parantezle duruyor ("... - (700.0.570-A)"). Dar
+    // olcut yuzunden ayni urune IKINCI bir proje acilabiliyordu; ekibin
+    // uzerinde calistigi kayit boylece ikizlenirdi. APQP modulu de bu uc
+    // alana bakar (apqp.html erpKanit), olcut onunla ayni.
+    if (K.length < 4) return false;
+    const metin = [f.project, f.productName, p?.name].map(buyuk).join(' ');
+    return metin.includes(K);
   }) || null;
 }
