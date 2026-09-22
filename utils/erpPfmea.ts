@@ -526,12 +526,12 @@ export function iskeletUret(urun: { kod: string; ad: string }, bom: any[], rota:
 // ── ERP'den oku + üret ────────────────────────────────────────────────────
 // Eksik ERP verisini yerel LeanSys ajani ceker (LeanSys yalnizca OKUNUR).
 // Ajan kapaliysa sessizce gecilir; uretim eldeki veriyle surer.
-async function ajanTazele(yol: string, kod: string): Promise<void> {
+async function ajanTazele(yol: string, kod: string, ms = 45000): Promise<void> {
   try {
     const c = new AbortController();
     // Ajan bilinmeyen kodda yanit vermeyebiliyor; kisa tutulur ki hatali bir
     // kod toplu uretimi dakikalarca bekletmesin (gercek cekim birkac saniye).
-    const z = setTimeout(() => c.abort(), 45000);
+    const z = setTimeout(() => c.abort(), ms);
     await fetch(`http://127.0.0.1:17777/${yol}?codes=${encodeURIComponent(kod)}`, { signal: c.signal });
     clearTimeout(z);
   } catch { /* ajan yok - eldeki veriyle devam */ }
@@ -587,12 +587,12 @@ async function planlariOku(kodlar: string[]): Promise<Record<string, any[]>> {
     }
     return cikti;
   };
+  // Alt kalemlerin planlari da bayatliyordu: yalniz ERP'de HIC olmayanlar
+  // cekiliyordu, degeri sonradan degisen (ornekleme buyuklugu, limit) kalem
+  // eski haliyle kaliyordu. Hepsi tek cagrida tazelenir; ajan kapaliysa
+  // eldeki veriyle devam edilir.
+  if (kodlar.length) await ajanTazele('refreshplan', kodlar.join(','), 30000);
   let satir = await oku(kodlar);
-  const eksik = kodlar.filter(k => !satir.some(x => met(x.stok_kodu) === k));
-  if (eksik.length) {                             // plani ERP'de yok - LeanSys'ten cek
-    await ajanTazele('refreshplan', eksik.join(','));
-    satir = await oku(kodlar);
-  }
   const m: Record<string, any[]> = {};
   satir.forEach(x => (m[met(x.stok_kodu)] = m[met(x.stok_kodu)] || []).push(x));
   return m;
@@ -605,20 +605,21 @@ export async function erpdenUret(stokKodu: string): Promise<UretimSonuc> {
     sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,makine_grup,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
     sorgu(`leansys_kontrol_plani?select=*&stok_kodu=eq.${kod}`),
   ]);
-  // Eksik olan neyse LeanSys'ten cekilir, sonra yeniden okunur
-  const eksik: Promise<void>[] = [];
-  if (!bomHam.length) eksik.push(ajanTazele('refreshbom', stokKodu));
-  if (!rotaHam.length) eksik.push(ajanTazele('refreshop', stokKodu));
-  if (!planHam.length) eksik.push(ajanTazele('refreshplan', stokKodu));
-  if (eksik.length) {
-    await Promise.all(eksik);
-    const [b2, r2, p2] = await Promise.all([
-      bomHam.length ? Promise.resolve(bomHam) : sorgu(`urun_agaclari?select=tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=eq.${kod}`),
-      rotaHam.length ? Promise.resolve(rotaHam) : sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,makine_grup,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
-      planHam.length ? Promise.resolve(planHam) : sorgu(`leansys_kontrol_plani?select=*&stok_kodu=eq.${kod}`),
-    ]);
-    bomHam = b2; rotaHam = r2; planHam = p2;
-  }
+  // Ayna DOLUYSA hic tazelenmiyordu: ERP'de degistirilen ornekleme
+  // buyuklugu, limitler ve revizyon PFMEA'ya hic yansimiyor, uretim aylar
+  // oncesinin kontrol planiyla yapiliyordu (216.0.367'de buyukluk ERP'de 1,
+  // aynada 3 ve bir satirda 26 kalmisti). Artik ana urunun uc tablosu HER
+  // uretimde tazelenir; ajan kapaliysa eldeki veriyle sessizce devam edilir.
+  await Promise.all([
+    ajanTazele('refreshbom', stokKodu, 15000),
+    ajanTazele('refreshop', stokKodu, 15000),
+    ajanTazele('refreshplan', stokKodu, 15000),
+  ]);
+  [bomHam, rotaHam, planHam] = await Promise.all([
+    sorgu(`urun_agaclari?select=tuketim_kodu,tuketim_adi,varsayilan&urun_kodu=eq.${kod}`),
+    sorgu(`operasyon_kartlari?select=op_no,makine_kodu,makine_adi,makine_grup,rota_adi,varsayilan,header_id&stok_kodu=eq.${kod}`),
+    sorgu(`leansys_kontrol_plani?select=*&stok_kodu=eq.${kod}`),
+  ]);
   if (!rotaHam.length && !planHam.length) throw new Error('Bu ürün için operasyon kartı ve kontrol planı bulunamadı (LeanSys’ten de gelmedi).');
 
   // Agacin TUM seviyeleri (yari mamullerin altindaki hammaddeler dahil)
