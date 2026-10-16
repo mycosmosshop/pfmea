@@ -7,7 +7,7 @@ interface SeverityModalProps {
   onClose: () => void;
 }
 
-const vdaSeverityData = [
+export const vdaSeverityData = [
     { s: 10, effect: 'High', plant: 'Failure may result in health and/or safety risk for the manufacturing or assembly worker.', ship: 'Failure may result in health and/or safety risk for the manufacturing or assembly worker.', user: 'Affects safe operation of the vehicle and/or other vehicles, the health of driver or passenger(s) or road users or pedestrians.' },
     { s: 9, effect: 'High', plant: 'Failure may result in inplant regulatory noncompliance.', ship: 'Failure may result in inplant regulatory noncompliance.', user: 'Noncompliance with regulations.' },
     { s: 8, effect: 'Moderately high', plant: '100% of production run affected may have to be scrapped.', ship: 'Line shutdown greater than full production shift; stop shipment possible; field repair or replacement required (Assembly to End User) other than for regulatory noncompliance.', user: 'Loss of primary vehicle function necessary for normal driving expected service life.' },

@@ -1,13 +1,19 @@
 import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
-import { writeSanifoamAntet } from '../utils/excelExport';
+import { writeSanifoamAntet, sodApIleIndir } from '../utils/excelExport';
+import { apFormulu, apMatrisSatirlari, AP_SAYFA, SOD_SAYFA } from '../utils/sodAp';
+import { initialApMatrix } from '../utils/ap-matrix';
+import { vdaSeverityData } from './SeverityModal';
+import { aiagVdaOccurrenceData } from './OccurrenceModal';
+import { aiagVdaData } from './DetectionModal';
 
 // Declare global variables for CDN scripts
 declare const XLSX: any;
 declare const jspdf: any;
 
 interface FmeaTableProps {
+  apMatrix?: ('H' | 'M' | 'L')[][][];
   data: FmeaData;
   registryData: RegistryData;
   projectData: ProjectData;
@@ -63,7 +69,7 @@ const joinActionDetails = (actions: FmeaAction[] = [], field: keyof FmeaAction) 
 };
 
 
-const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete, onOpenClassification }) => {
+const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, projectData, onOpenModal, onAddItem, onOpenSeverityModal, onOpenOccurrenceModal, onOpenDetectionModal, onDelete, onOpenClassification }) => {
   // Özel karakteristik eşgüdümü: satır(neden) ana kaynak; fonksiyon seviyesinde
   // tanımlı (Flow'dan/fonksiyon modalından) ama hiçbir nedeninde sembol yoksa,
   // fonksiyonun ilk nedeninde göster (tüm satırlara yaymadan). Flow & FMEA tutarlı olur.
@@ -339,6 +345,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
     let lastStepId: string | null = null;
     const numericCols = [7, 11, 13, 24, 25, 26];
     const apCols = [14, 28];
+    const ilkVeriSatiri = rowIndex + 1;   // Excel satır no (1 tabanlı)
 
     rows.forEach(row => {
         const { item, step, func, mode, cause, effects, isFirstStepRow, isFirstFuncRow, isFirstModeRow } = row;
@@ -391,18 +398,15 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
                 const baseStyle = (numericCols.includes(colIndex) || apCols.includes(colIndex)) ? numericCellStyle : defaultCellStyle;
                 let finalStyle = isZebra ? { ...baseStyle, ...zebraFill } : { ...baseStyle };
 
-                if (apCols.includes(colIndex)) {
-                    const apFill = getApFill(value);
-                    if (apFill) {
-                        finalStyle = { ...finalStyle, fill: apFill };
-                    }
-                }
+                // AP hücresi formüldür: S/O/D Excel'de değişince AP de değişir. Renk sabit dolgu
+                // değil koşullu biçim (sodApIleIndir) — değer değişince eski renk kalmasın.
+                const R = rowIndex + 1;
+                const apF = colIndex === 14 ? apFormulu(`H${R}`, `L${R}`, `N${R}`)
+                    : colIndex === 28 ? apFormulu(`Y${R}`, `Z${R}`, `AA${R}`, true) : undefined;
 
-                ws[encodeCell(rowIndex, colIndex)] = {
-                    v: value,
-                    t: typeof value === 'number' ? 'n' : 's',
-                    s: finalStyle
-                };
+                ws[encodeCell(rowIndex, colIndex)] = apF
+                    ? { f: apF, v: value, t: 's', s: finalStyle }
+                    : { v: value, t: typeof value === 'number' ? 'n' : 's', s: finalStyle };
 
                 if ((cell.span || 1) > 1) {
                     merges.push({ s: { r: rowIndex, c: colIndex }, e: { r: rowIndex + cell.span! - 1, c: colIndex } });
@@ -436,7 +440,32 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, registryData, projectData, 
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'FMEA');
-    XLSX.writeFile(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    // S-O-D kriter tabloları (açılır listenin yardım metni bu sayfayı gösterir)
+    const kriter: any[][] = [['ŞİDDET (S) — AIAG-VDA PFMEA'], ['S', 'Etki', 'Tesis içi (plant)', 'Sevk / müşteri tesisi', 'Son kullanıcı']];
+    vdaSeverityData.forEach(x => kriter.push([x.s, x.effect, x.plant, x.ship, x.user]));
+    kriter.push([], ['OLUŞMA (O)'], ['O', 'Olasılık', 'Sıklık']);
+    aiagVdaOccurrenceData.forEach(x => kriter.push([x.scale, x.probability, x.frequency]));
+    kriter.push([], ['TESPİT (D)'], ['D', 'Tespit yeteneği', 'Yöntem olgunluğu', 'Tespit fırsatı']);
+    aiagVdaData.forEach(x => kriter.push([x.d, x.ability, x.maturity, x.opportunity]));
+    const wsK = XLSX.utils.aoa_to_sheet(kriter);
+    Object.keys(wsK).filter(k => k[0] !== '!').forEach(k => {
+        const satir = XLSX.utils.decode_cell(k).r;
+        const baslik = kriter[satir] && kriter[satir].length <= 5 && typeof kriter[satir][0] === 'string';
+        wsK[k].s = baslik ? mainHeaderStyle : defaultCellStyle;
+    });
+    wsK['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 50 }, { wch: 50 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsK, SOD_SAYFA);
+
+    // AP matrisi (AP formülü buradan okur) — uygulamadaki matrisle aynı
+    const wsAp = XLSX.utils.aoa_to_sheet(apMatrisSatirlari(apMatrix || initialApMatrix));
+    wsAp['!cols'] = [{ wch: 4 }, { wch: 4 }, ...Array(10).fill({ wch: 6 })];
+    XLSX.utils.book_append_sheet(wb, wsAp, AP_SAYFA);
+
+    sodApIleIndir(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+        ilk: ilkVeriSatiri, son: Math.max(ilkVeriSatiri, _lastRow + 1),
+        s: ['H', 'Y'], o: ['L', 'Z'], d: ['N', 'AA'], ap: ['O'], apRevize: ['AC'],
+    });
   };
 
   // jsPDF standart fontu Türkçe karakter desteklemez (ı,ş,ğ,ü,ö,ç bozulur ve metin harf-harf yayılır).

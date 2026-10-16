@@ -8,7 +8,7 @@ interface OccurrenceModalProps {
 }
 
 // Data extracted from user images
-const aiagVdaOccurrenceData = [
+export const aiagVdaOccurrenceData = [
     { scale: 10, probability: 'Very High', frequency: '≥ 100 per thousand\n≥ 1 in 10' },
     { scale: 9, probability: 'High', frequency: '50 per thousand\n1 in 20' },
     { scale: 8, probability: 'High', frequency: '20 per thousand\n1 in 50' },

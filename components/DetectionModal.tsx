@@ -7,7 +7,7 @@ interface DetectionModalProps {
   onOpenAssistant: () => void;
 }
 
-const aiagVdaData = [
+export const aiagVdaData = [
     { d: 10, ability: 'Very low', maturity: 'No testing or inspection method has been established or is known.', opportunity: 'The failure mode will not or cannot be detected.' },
     { d: 9, ability: 'Low', maturity: 'It is unlikely that the testing or inspection method will detect the failure mode.', opportunity: 'The failure mode is not easily detected through random or sporadic audits.' },
     { d: 8, ability: 'Low', maturity: 'Test or inspection method has not been proven to be effective and reliable (e.g plant has little or no experience with method, gauge R&R results marginal) on comparable process or this application etc.)', opportunity: 'Human inspection (visual, tactile, audible), or use of manual gauging (attribute or variable) taht should detect the failure mode or failure cause.' },
