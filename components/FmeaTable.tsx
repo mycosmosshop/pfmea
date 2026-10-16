@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
-import { writeSanifoamAntet, sodApIleIndir } from '../utils/excelExport';
-import { apFormulu, apMatrisSatirlari, sodEtiket, listeSatirlari, AP_SAYFA, SOD_SAYFA, LISTE_SAYFA } from '../utils/sodAp';
+import { writeSanifoamAntet, fmeaIndir } from '../utils/excelExport';
+import { sodEtiket } from '../utils/sodAp';
+import { fmeaGovdeYaz, ekSayfalar, FMEA_SAYFA, FMEA_SON_SUTUN } from '../utils/fmeaExcel';
 import { initialApMatrix } from '../utils/ap-matrix';
 import { vdaSeverityData } from './SeverityModal';
 import { aiagVdaOccurrenceData } from './OccurrenceModal';
@@ -310,169 +311,76 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     }
     rowIndex++;
 
-    // --- MAIN TABLE HEADER ---
-    const header1Row = rowIndex;
-    const header2Row = rowIndex + 1;
-    const header3Row = rowIndex + 2;
-
-    const setHeaderCell = (r: number, c: number, v: string) => {
-        ws[encodeCell(r, c)] = { v, t: 's', s: mainHeaderStyle };
-    };
-
-    setHeaderCell(header1Row, 0, 'Structure analysis (Step 2)'); merges.push({ s: { r: header1Row, c: 0 }, e: { r: header1Row, c: 2 } });
-    setHeaderCell(header1Row, 3, 'Function analysis (Step 3)'); merges.push({ s: { r: header1Row, c: 3 }, e: { r: header1Row, c: 5 } });
-    setHeaderCell(header1Row, 6, 'Failure analysis (Step 4)'); merges.push({ s: { r: header1Row, c: 6 }, e: { r: header1Row, c: 9 } });
-    setHeaderCell(header1Row, 10, 'Risk analysis (Step 5)'); merges.push({ s: { r: header1Row, c: 10 }, e: { r: header1Row, c: 16 } });
-    setHeaderCell(header1Row, 17, 'Optimization (Step 6)'); merges.push({ s: { r: header1Row, c: 17 }, e: { r: header1Row, c: 29 } });
-
-    const headerDefs = [
-      { t: "1. Process Item System, Subsystem, Part Element or Name of Process", c: 0, r: 2 }, { t: "2. Process Step Station No. and Name of Focus Element", c: 1, r: 2 }, { t: "3. Process Work Element 4M Type", c: 2, r: 2 },
-      { t: "1. Function of the Process Item Function of System, Subsystem, Part Element or Process", c: 3, r: 2 }, { t: "2. Function of the Process Step and Product Characteristic", c: 4, r: 2 }, { t: "3. Function of the Process Work Element and Process Characteristic", c: 5, r: 2 },
-      { t: "1. Failure Effect (FE) for the Next Higher Level and/or End User", c: 6, r: 2 }, { t: "Severity (S) of FE", c: 7, r: 2 }, { t: "2. Failure Mode (FM) of the Focus Element", c: 8, r: 2 }, { t: "3. Failure Cause (FC) of the Work Element", c: 9, r: 2 },
-      { t: "Current Prevention Control (PC) of FC", c: 10, r: 2 }, { t: "Occurrence (O) of FC", c: 11, r: 2 }, { t: "Current Detection Control (DC) of FC or FM", c: 12, r: 2 }, { t: "Detection (D) of FC/FM", c: 13, r: 2 }, { t: "PFMEA AP", c: 14, r: 2 }, { t: "Spec. Characteristic", c: 15, r: 2 }, { t: "Filter Code (Optional)", c: 16, r: 2 },
-      { t: "Prevention Action", c: 17, r: 2 }, { t: "Detection Action", c: 18, r: 2 }, { t: "Responsible Person's Name", c: 19, r: 2 }, { t: "Target Completion Date", c: 20, r: 2 }, { t: "Status", c: 21, r: 2 }, { t: "Action Taken with Pointer to Evidence", c: 22, r: 2 }, { t: "Completion Date", c: 23, r: 2 },
-      { t: "Severity (S)", c: 24, r: 2 }, { t: "Occurrence (O)", c: 25, r: 2 }, { t: "Detection (D)", c: 26, r: 2 }, { t: "Spec. Characteristic", c: 27, r: 2 }, { t: "PFMEA AP", c: 28, r: 2 }, { t: "Remarks", c: 29, r: 2 },
-    ];
-    
-    headerDefs.forEach(def => {
-        setHeaderCell(header2Row, def.c, def.t);
-        merges.push({ s: { r: header2Row, c: def.c }, e: { r: header3Row, c: def.c } });
-    });
-    rowIndex += 3;
-
-    // --- MAIN TABLE BODY ---
+    // --- GÖVDE: Excel TABLOSU (satır ekle/sil, kademe listeleri, Görevler sekmesi) — utils/fmeaExcel.ts ---
     let isZebra = false;
     let lastStepId: string | null = null;
-    const numericCols = [7, 11, 13, 24, 25, 26];
-    const apCols = [14, 28];
-    const ilkVeriSatiri = rowIndex + 1;   // Excel satır no (1 tabanlı)
-
-    rows.forEach(row => {
-        const { item, step, func, mode, cause, effects, isFirstStepRow, isFirstFuncRow, isFirstModeRow } = row;
-        
-        if (isFirstStepRow && step.id !== lastStepId) {
-            isZebra = !isZebra;
-            lastStepId = step.id;
-        }
-
+    const zebra: boolean[] = [];
+    const satirlar = rows.map(row => {
+        const { item, step, func, mode, cause, effects, isFirstStepRow } = row;
+        if (isFirstStepRow && step.id !== lastStepId) { isZebra = !isZebra; lastStepId = step.id; }
+        zebra.push(isZebra);
         const preventionActions = cause?.actions?.filter(a => a.type === 'prevention') || [];
         const detectionActions = cause?.actions?.filter(a => a.type === 'detection') || [];
-        
-        const cellData = [
-            { v: item.name, first: isFirstStepRow, span: stepRowSpans[step.id] },
-            { v: `[${step.operationNumber}] ${step.name}`, first: isFirstStepRow, span: stepRowSpans[step.id] },
-            { v: cause?.processWorkElement },
-            { v: item.name, first: isFirstStepRow, span: stepRowSpans[step.id] },
-            { v: func ? `${func.name}\n${func.productCharacteristic || ''}` : '', first: isFirstFuncRow, span: funcRowSpans[func?.id] },
-            { v: cause?.workElementFunction },
-            { v: effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'), first: isFirstModeRow, span: modeRowSpans[mode?.id] },
-            { v: sodEtiket('S', cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)) },
-            { v: mode?.description, first: isFirstModeRow, span: modeRowSpans[mode?.id] },
-            { v: cause?.description },
-            { v: cause?.preventionControl },
-            { v: sodEtiket('O', cause?.occurrence) },
-            { v: cause?.detectionControl },
-            { v: sodEtiket('D', cause?.detection) },
-            { v: cause?.actionPriority },
-            { v: clsLabel(rowClsSymbol(func, cause)) },
-            { v: cause?.filterCode },
-            { v: joinActionDetails(preventionActions, 'description') },
-            { v: joinActionDetails(detectionActions, 'description') },
-            { v: joinActionDetails(cause?.actions, 'responsiblePerson') },
-            { v: joinActionDetails(cause?.actions, 'targetCompletionDate') },
-            { v: joinActionDetails(cause?.actions, 'status') },
-            { v: joinActionDetails(cause?.actions, 'actionTaken') },
-            { v: joinActionDetails(cause?.actions, 'completionDate') },
-            { v: sodEtiket('S', cause?.revisedSeverity) },
-            { v: sodEtiket('O', cause?.revisedOccurrence) },
-            { v: sodEtiket('D', cause?.revisedDetection) },
-            { v: clsLabel(rowClsSymbol(func, cause)) },
-            { v: cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '' },
-            { v: cause?.remarks }
-        ];
-
-        cellData.forEach((cell, colIndex) => {
-            if (cell.first !== false) {
-                const value = cell.v === undefined || cell.v === null ? '' : cell.v;
-                
-                const baseStyle = (numericCols.includes(colIndex) || apCols.includes(colIndex)) ? numericCellStyle : defaultCellStyle;
-                let finalStyle = isZebra ? { ...baseStyle, ...zebraFill } : { ...baseStyle };
-
-                // AP hücresi formüldür: S/O/D Excel'de değişince AP de değişir. Renk sabit dolgu
-                // değil koşullu biçim (sodApIleIndir) — değer değişince eski renk kalmasın.
-                const R = rowIndex + 1;
-                const apF = colIndex === 14 ? apFormulu(`H${R}`, `L${R}`, `N${R}`)
-                    : colIndex === 28 ? apFormulu(`Y${R}`, `Z${R}`, `AA${R}`, true) : undefined;
-
-                ws[encodeCell(rowIndex, colIndex)] = apF
-                    ? { f: apF, v: value, t: 's', s: finalStyle }
-                    : { v: value, t: typeof value === 'number' ? 'n' : 's', s: finalStyle };
-
-                if ((cell.span || 1) > 1) {
-                    merges.push({ s: { r: rowIndex, c: colIndex }, e: { r: rowIndex + cell.span! - 1, c: colIndex } });
-                }
-            } else {
-                // Add blank cells with styling for merged areas to ensure borders are drawn
-                const baseStyle = (numericCols.includes(colIndex) || apCols.includes(colIndex)) ? numericCellStyle : defaultCellStyle;
-                let finalStyle = isZebra ? { ...baseStyle, ...zebraFill } : { ...baseStyle };
-                 ws[encodeCell(rowIndex, colIndex)] = { v: '', t: 's', s: finalStyle };
-            }
-        });
-        rowIndex++;
+        // Her satır tam değer taşır (birleşik hücre yok): tablo süzülür/sıralanır, satır eklenip silinir.
+        return [
+            item.name,
+            `[${step.operationNumber}] ${step.name}`,
+            cause?.processWorkElement,
+            item.name,
+            func ? `${func.name}\n${func.productCharacteristic || ''}`.trim() : '',
+            cause?.workElementFunction,
+            effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'),
+            sodEtiket('S', cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)),
+            mode?.description,
+            cause?.description,
+            cause?.preventionControl,
+            sodEtiket('O', cause?.occurrence),
+            cause?.detectionControl,
+            sodEtiket('D', cause?.detection),
+            cause?.actionPriority,
+            clsLabel(rowClsSymbol(func, cause)),
+            cause?.filterCode,
+            joinActionDetails(preventionActions, 'description'),
+            joinActionDetails(detectionActions, 'description'),
+            joinActionDetails(cause?.actions, 'responsiblePerson'),
+            joinActionDetails(cause?.actions, 'targetCompletionDate'),
+            joinActionDetails(cause?.actions, 'status'),
+            joinActionDetails(cause?.actions, 'actionTaken'),
+            joinActionDetails(cause?.actions, 'completionDate'),
+            sodEtiket('S', cause?.revisedSeverity),
+            sodEtiket('O', cause?.revisedOccurrence),
+            sodEtiket('D', cause?.revisedDetection),
+            clsLabel(rowClsSymbol(func, cause)),
+            cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
+            cause?.remarks,
+        ].map(v => (v === undefined || v === null ? '' : v));
     });
-    
-    // --- FINALIZE & WRITE ---
-    // Boş kalan tüm hücreleri ince kenarlıkla doldur — antet/başlık/proje bilgisi alanında çizgi eksiği kalmasın.
-    const _lastRow = rowIndex - 1;
-    for (let r = 0; r <= _lastRow; r++) {
+    const tabloUstu = rowIndex;
+    const ayar = fmeaGovdeYaz(XLSX, ws, merges, rowIndex, satirlar, zebra);
+
+    // Antet / proje bilgisi alanında çizgi eksiği kalmasın
+    for (let r = 0; r < tabloUstu; r++) {
         for (let c = 0; c <= 29; c++) {
             const a = encodeCell(r, c);
             if (!ws[a]) ws[a] = { v: '', t: 's', s: { border: thinBorder } };
         }
     }
-
     ws['!merges'] = merges;
-
-    // S/O/D sütunları "7 – açıklama" taşır (açılır liste): dar bırakılırsa anlam okunmaz
-    const colWidths = [ 20, 20, 15, 20, 25, 20, 25, 16, 25, 25, 20, 16, 20, 16, 5, 10, 10, 20, 20, 15, 15, 10, 25, 15, 16, 16, 16, 10, 5, 20 ];
-    ws['!cols'] = colWidths.map(wch => ({ wch }));
-
-    ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 29, r: _lastRow } });
+    ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: FMEA_SON_SUTUN, r: ayar.son - 1 } });
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'FMEA');
+    XLSX.utils.book_append_sheet(wb, ws, FMEA_SAYFA);
 
-    // S-O-D kriter tabloları (açılır listenin yardım metni bu sayfayı gösterir)
+    // S-O-D kriter tabloları (açılır listenin ipucu bu sayfayı gösterir)
     const kriter: any[][] = [['ŞİDDET (S) — AIAG-VDA PFMEA'], ['S', 'Etki', 'Tesis içi (plant)', 'Sevk / müşteri tesisi', 'Son kullanıcı']];
     vdaSeverityData.forEach(x => kriter.push([x.s, x.effect, x.plant, x.ship, x.user]));
     kriter.push([], ['OLUŞMA (O)'], ['O', 'Olasılık', 'Sıklık']);
     aiagVdaOccurrenceData.forEach(x => kriter.push([x.scale, x.probability, x.frequency]));
     kriter.push([], ['TESPİT (D)'], ['D', 'Tespit yeteneği', 'Yöntem olgunluğu', 'Tespit fırsatı']);
     aiagVdaData.forEach(x => kriter.push([x.d, x.ability, x.maturity, x.opportunity]));
-    const wsK = XLSX.utils.aoa_to_sheet(kriter);
-    Object.keys(wsK).filter(k => k[0] !== '!').forEach(k => {
-        const satir = XLSX.utils.decode_cell(k).r;
-        const baslik = kriter[satir] && kriter[satir].length <= 5 && typeof kriter[satir][0] === 'string';
-        wsK[k].s = baslik ? mainHeaderStyle : defaultCellStyle;
-    });
-    wsK['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 50 }, { wch: 50 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(wb, wsK, SOD_SAYFA);
+    ekSayfalar(XLSX, wb, satirlar, apMatrix || initialApMatrix, kriter);
 
-    // AP matrisi (AP formülü buradan okur) — uygulamadaki matrisle aynı
-    const wsAp = XLSX.utils.aoa_to_sheet(apMatrisSatirlari(apMatrix || initialApMatrix));
-    wsAp['!cols'] = [{ wch: 4 }, { wch: 4 }, ...Array(10).fill({ wch: 6 })];
-    XLSX.utils.book_append_sheet(wb, wsAp, AP_SAYFA);
-
-    // Açılır liste kaynağı ("7 – açıklama"), gizli
-    const wsL = XLSX.utils.aoa_to_sheet(listeSatirlari());
-    wsL['!cols'] = [{ wch: 50 }, { wch: 40 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(wb, wsL, LISTE_SAYFA);
-    wb.Workbook = { Sheets: [{}, {}, {}, { Hidden: 1 }] };
-
-    sodApIleIndir(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`, {
-        ilk: ilkVeriSatiri, son: Math.max(ilkVeriSatiri, _lastRow + 1),
-        s: ['H', 'Y'], o: ['L', 'Z'], d: ['N', 'AA'], ap: ['O'], apRevize: ['AC'],
-    });
+    fmeaIndir(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`, ayar);
   };
 
   // jsPDF standart fontu Türkçe karakter desteklemez (ı,ş,ğ,ü,ö,ç bozulur ve metin harf-harf yayılır).

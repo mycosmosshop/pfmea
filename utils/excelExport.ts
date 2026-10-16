@@ -3,7 +3,7 @@
 // xlsx-js-style (XLSX global) hücre stillerini (renk/dolgu/kenarlık) korur.
 
 import { drawingEkle } from './flowDrawing';
-import { sodApXml, type SodApAyar } from './sodAp';
+import { fmeaPaketle, type FmeaPaketAyar } from './fmeaExcel';
 
 declare const XLSX: any;
 
@@ -136,22 +136,19 @@ export function finalizeAndDownload(ws: { [k: string]: any }, merges: any[], col
   })().catch(e => { console.error('Şekilli dışa aktarma başarısız, şekilsiz indiriliyor', e); XLSX.writeFile(wb, fileName); });
 }
 
-// PFMEA: S/O/D açılır liste + AP koşullu rengi paket XML'ine eklenip indirilir (ilk sayfa = FMEA).
-// JSZip yoksa ya da ekleme başarısızsa formüllü ama listesiz indirilir.
-export async function sodApIleIndir(wb: any, fileName: string, ayar: SodApAyar): Promise<void> {
+// PFMEA çalışma Excel'i: tablo / listeler / renkler paket XML'ine eklenip indirilir (ilk sayfa = FMEA).
+// JSZip yoksa ya da ekleme başarısızsa düz (tablosuz) indirilir.
+export async function fmeaIndir(wb: any, fileName: string, ayar: FmeaPaketAyar): Promise<void> {
   try {
     if (typeof JSZip === 'undefined') throw new Error('JSZip yüklü değil');
     const zip = await JSZip.loadAsync(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
-    const { sayfa, stil } = sodApXml(await zip.file('xl/worksheets/sheet1.xml').async('string'),
-      await zip.file('xl/styles.xml').async('string'), ayar);
-    zip.file('xl/worksheets/sheet1.xml', sayfa);
-    zip.file('xl/styles.xml', stil);
+    await fmeaPaketle(zip, ayar);
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = fileName; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   } catch (e) {
-    console.error('Açılır liste eklenemedi, listesiz indiriliyor', e);
+    console.error('Tablo/listeler eklenemedi, düz indiriliyor', e);
     XLSX.writeFile(wb, fileName);
   }
 }
