@@ -230,6 +230,19 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     });
   };
 
+  // 🗑 satırı gerçekten kaldırır: neden tek ise hata türüyle, hata türü de tek ise fonksiyonla birlikte silinir
+  // (yalnız nedeni silmek satırı "nedeni boş hata türü" olarak bırakıyordu).
+  const satirSil = (func?: ProcessStepFunction, mode?: FailureMode, cause?: FailureCause) => {
+    if (!onDelete) return;
+    const nedenSayisi = (mode?.causeIds || []).length, modSayisi = (func?.failureModeIds || []).length;
+    let tip: string, id: string, ne: string;
+    if (cause && nedenSayisi > 1) { tip = 'FailureCause'; id = cause.id; ne = `Hata nedeni: "${cause.description || '—'}"`; }
+    else if (mode && (modSayisi > 1 || !func)) { tip = 'FailureMode'; id = mode.id; ne = `Hata türü: "${mode.description || '—'}"${cause ? ` ve nedeni "${cause.description || '—'}"` : ''}`; }
+    else if (func) { tip = 'ProcessStepFunction'; id = func.id; ne = `Fonksiyon: "${func.name || '—'}"${mode ? ` + hata türü "${mode.description || '—'}"` : ''}${cause ? ` + nedeni "${cause.description || '—'}"` : ''}\n(Bu fonksiyonun başka satırı yok.)`; }
+    else return;
+    if (window.confirm(`Bu satır silinsin mi?\n\n${ne}`)) onDelete(tip, id);
+  };
+
   // Excel ve PDF aynı satırları kullanır
   const ANTET = { docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1' };   // FMEA + Proje Geçmişi sayfası
   const fmeaSatirlari = () => {
@@ -780,16 +793,10 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
                             <td className={`${tdClass} ${isCauseCellClickable ? tdClickableClass : ''}`} onClick={handleCauseClick}>{cause?.remarks || '—'}</td>
                             {onDelete && (
                                 <td className="border border-gray-400 p-1 text-center align-middle print:hidden">
-                                    {cause ? (
+                                    {(cause || mode || func) ? (
                                         <button
-                                            title="Bu satırı (hata nedenini) sil"
-                                            onClick={(e) => { e.stopPropagation(); if (window.confirm(`Bu satırı silmek istediğinize emin misiniz?\n\nHata Nedeni: "${cause.description || '—'}"`)) onDelete('FailureCause', cause.id); }}
-                                            className="text-red-500 hover:text-white hover:bg-red-600 rounded px-2 py-1 text-sm transition-colors"
-                                        >🗑</button>
-                                    ) : mode ? (
-                                        <button
-                                            title="Bu hata modunu (ve alt satırlarını) sil"
-                                            onClick={(e) => { e.stopPropagation(); if (window.confirm(`Bu hata modunu ve altındaki tüm nedenleri silmek istediğinize emin misiniz?\n\nHata Modu: "${mode.description || '—'}"`)) onDelete('FailureMode', mode.id); }}
+                                            title="Bu satırı sil"
+                                            onClick={(e) => { e.stopPropagation(); satirSil(func, mode, cause); }}
                                             className="text-red-500 hover:text-white hover:bg-red-600 rounded px-2 py-1 text-sm transition-colors"
                                         >🗑</button>
                                     ) : null}
