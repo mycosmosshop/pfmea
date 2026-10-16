@@ -64,7 +64,7 @@ export const SUTUNLAR: Sutun[] = [
 ];
 export const DURUMLAR = ['Open', 'Pending implementation', 'Completed', 'Cancelled'];
 // Görevler sekmesinde gösterilen FMEA sütunları (indeks)
-const GOREV_SUTUN = [1, 8, 9, 14, 17, 18, 19, 20, 21, 22, 23];
+export const GOREV_SUTUN = [1, 8, 9, 14, 17, 18, 19, 20, 21, 22, 23];
 
 export const harf = (c: number): string => { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; };
 const sutunNo = (ad: string) => SUTUNLAR.findIndex(s => s.ad === ad);
@@ -72,6 +72,16 @@ const TEKRAR = SUTUNLAR.map((s, i) => s.tekrar ? i : -1).filter(i => i >= 0);
 const FE = sutunNo('1. Failure Effect (FE)'), S_FE = sutunNo('Severity (S) of FE'), F_ITEM = sutunNo('1. Function of the Process Item');
 /** Üstteki satırın aynı sütunundaki değer (satır ekle/sil'de kaymaz; tablonun ilk satırında boş). */
 const MIRAS = `IF(ROW()-1=ROW(${TABLO_ADI}[#Headers]),"",INDIRECT("R[-1]C",FALSE)&"")`;
+/** Her satırda üsttekini izleyen (gri) kademe sütunları: aynı değer + üst kademeleri de aynı. Excel ve PDF ortak. */
+export function mirasSutunlari(veri: any[][]): Set<number>[] {
+  return veri.map((satir, i) => {
+    const miras = new Set<number>(), ust = veri[i - 1];
+    for (const c of TEKRAR) { if (!ust || String(satir[c] ?? '') !== String(ust[c] ?? '')) break; miras.add(c); }
+    return miras;
+  });
+}
+export const FE_SUTUN = FE, S_FE_SUTUN = S_FE;
+
 /** Failure Effect metnindeki "(n)" puanlarının en yükseği (1–10), yoksa ''. Excel formülüyle aynı kural. */
 export const feMax = (t: unknown): number | '' => {
   const n = [...String(t ?? '').matchAll(/\((\d{1,2})\)/g)].map(m => +m[1]).filter(x => x >= 1 && x <= 10);
@@ -135,11 +145,11 @@ export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number
   const ad = String(veri[0][0] ?? '');
   const tekItem = !!urunHucre && ad !== '' && String(ws[urunHucre.replace(/\$/g, '')]?.v ?? '') === ad
     && veri.every(s => String(s[0] ?? '') === ad);
+  const mirasHarita = mirasSutunlari(veri);
   veri.forEach((satir, i) => {
     const r0 = baslikR + 1 + i, R = r0 + 1;
     // üstteki satırla aynı kademe değeri, üst kademeleri de aynıysa üsttekini izler (formül)
-    const miras = new Set<number>(), ust = veri[i - 1];
-    for (const c of TEKRAR) { if (!ust || String(satir[c] ?? '') !== String(ust[c] ?? '')) break; miras.add(c); }
+    const miras = mirasHarita[i];
     const sMax = feMax(satir[FE]);
     for (let c = 0; c <= SON_SUTUN; c++) {
       const tur = SUTUNLAR[c]?.tur;
@@ -188,12 +198,31 @@ export function ekSayfalar(XLSX: any, wb: any, satirlar: any[][], apMatrix: any,
   XLSX.utils.book_append_sheet(wb, g, GOREV_SAYFA);
 
   // S-O-D kriter tabloları
-  const wsK = XLSX.utils.aoa_to_sheet(kriterSatirlari);
-  Object.keys(wsK).filter(k => k[0] !== '!').forEach(k => {
-    const s = kriterSatirlari[XLSX.utils.decode_cell(k).r];
-    wsK[k].s = s && s.length <= 5 && typeof s[0] === 'string' ? bas : govde;
+  // bölüm başlığı (tek hücre) tüm genişlikte; 3–4 sütunlu tablolarda son sütun E'ye kadar birleşir; puan ortada
+  const KG = [6, 18, 48, 48, 48], KS = KG.length - 1;
+  const wsK: any = {}, kMerge: any[] = [], kSatir: any[] = [];
+  const bolum = { ...bas, font: { ...bas.font, sz: 11 }, alignment: { ...bas.alignment, horizontal: 'left' } };
+  const puan = { ...govde, alignment: { ...govde.alignment, horizontal: 'center' } };
+  kriterSatirlari.forEach((s, r) => {
+    if (!s || !s.length) return;
+    const baslik = typeof s[0] === 'string';
+    if (s.length === 1) {
+      for (let c = 0; c <= KS; c++) wsK[enc(r, c)] = { v: c ? '' : s[0], t: 's', s: bolum };
+      kMerge.push({ s: { r, c: 0 }, e: { r, c: KS } }); kSatir[r] = { hpt: 20 }; return;
+    }
+    for (let c = 0; c <= KS; c++) {
+      const i = Math.min(c, s.length - 1), v = c < s.length ? (s[c] ?? '') : '';
+      wsK[enc(r, c)] = { v, t: typeof v === 'number' ? 'n' : 's', s: baslik ? bas : i === 0 ? puan : govde };
+    }
+    if (s.length - 1 < KS) kMerge.push({ s: { r, c: s.length - 1 }, e: { r, c: KS } });
+    // satır yüksekliği: en uzun hücre / sütun genişliği (birleşik son sütun geniş sayılır)
+    const gen = (c: number) => c === s.length - 1 ? KG.slice(c).reduce((a, b) => a + b, 0) : KG[c];
+    const n = Math.max(1, ...s.map((v: any, c: number) => String(v ?? '').split('\n').reduce((t: number, p: string) => t + Math.max(1, Math.ceil(p.length / (gen(c) * 1.2))), 0)));
+    kSatir[r] = { hpt: baslik ? 24 : Math.max(15, n * 11.5 + 3) };
   });
-  wsK['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 50 }, { wch: 50 }, { wch: 50 }];
+  wsK['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: kriterSatirlari.length - 1, c: KS } });
+  wsK['!merges'] = kMerge; wsK['!rows'] = kSatir;
+  wsK['!cols'] = KG.map(wch => ({ wch }));
   XLSX.utils.book_append_sheet(wb, wsK, SOD_SAYFA);
 
   // AP matrisi (AP formülü buradan okur)
@@ -332,6 +361,8 @@ export async function fmeaPaketle(zip: any, a: FmeaPaketAyar): Promise<void> {
   if (zip.file(apYol)) zip.file(apYol, apMatrisXml(await zip.file(apYol).async('string')));
   const gYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(GECMIS_SAYFA) + 1}.xml`;
   if (zip.file(gYol)) zip.file(gYol, yatayA4Xml(await zip.file(gYol).async('string')));
+  const sYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(SOD_SAYFA) + 1}.xml`;
+  if (zip.file(sYol)) zip.file(sYol, yatayA4Xml(await zip.file(sYol).async('string')));
   // Listeler / Görevler formülleri açılışta hesaplansın
   zip.file('xl/workbook.xml', /<calcPr[^>]*\/>/.test(wbx)
     ? wbx.replace(/<calcPr([^>]*)\/>/, (m: string, i: string) => `<calcPr${i.replace(/\s*fullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`)
