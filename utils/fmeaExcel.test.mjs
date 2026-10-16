@@ -69,9 +69,13 @@ if (lib && cikti) {
   ];
   const ws = {}; const merges = [];
   ws['A1'] = { v: 'Antet', t: 's' }; merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 29 } });
-  ws['A10'] = { v: 'Number/Name of product:', t: 's' }; ws['B10'] = { v: '5NA 881 989 B - Ses yalıtım süngeri', t: 's' };
+  // başlıktaki ad farklıysa Process Item metni DEĞİŞMEZ, başlığa bağlanmaz
+  const ws2 = { B10: { v: '5NA 881 989 B - farklı ad', t: 's' } };
+  E.fmeaGovdeYaz(XLSX, ws2, [], 14, satirlar, satirlar.map(() => false), '$B$10');
+  assert.equal(ws2['A17'].f, undefined); assert.equal(ws2['A17'].v, '5NA 881 989'); assert.equal(ws2['D17'].f, 'A17&""');
+  ws['A10'] = { v: 'Number/Name of product:', t: 's' }; ws['B10'] = { v: '5NA 881 989', t: 's' };   // aynı ad → bağlı
   const a = E.fmeaGovdeYaz(XLSX, ws, merges, 14, satirlar, satirlar.map((_, i) => i % 2 === 0), '$B$10');
-  assert.equal(ws['A17'].f, '$B$10&""'); assert.equal(ws['A17'].v, '5NA 881 989 B - Ses yalıtım süngeri');
+  assert.equal(ws['A17'].f, '$B$10&""'); assert.equal(ws['A17'].v, '5NA 881 989');
   assert.equal(ws['D17'].f, 'A17&""'); assert(ws['A18'].f.includes('INDIRECT'));
   assert.deepEqual(a, { baslik: 16, ilk: 17, son: 21 });
   ws['!merges'] = merges;
