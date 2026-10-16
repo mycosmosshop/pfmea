@@ -57,6 +57,7 @@ if (lib && cikti) {
     const r = Array(30).fill('');
     Object.assign(r, { 0: item, 1: step, 2: m4, 3: item + ' fonksiyonu', 4: fstep, 5: 'Proses karakteristiği', 6: eff, 7: sev, 8: mode, 9: cause, 10: pc,
       11: o, 12: dc, 13: d, 14: initialApMatrix[sev - 1][o - 1][d - 1], 17: prev, 18: det, 19: sor, 21: durum });
+    r[3] = item;   // yazılımda Function of the Process Item = item.name
     return r;
   };
   const satirlar = [
@@ -68,7 +69,10 @@ if (lib && cikti) {
   ];
   const ws = {}; const merges = [];
   ws['A1'] = { v: 'Antet', t: 's' }; merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 29 } });
-  const a = E.fmeaGovdeYaz(XLSX, ws, merges, 14, satirlar, satirlar.map((_, i) => i % 2 === 0));
+  ws['A10'] = { v: 'Number/Name of product:', t: 's' }; ws['B10'] = { v: '5NA 881 989 B - Ses yalıtım süngeri', t: 's' };
+  const a = E.fmeaGovdeYaz(XLSX, ws, merges, 14, satirlar, satirlar.map((_, i) => i % 2 === 0), '$B$10');
+  assert.equal(ws['A17'].f, '$B$10&""'); assert.equal(ws['A17'].v, '5NA 881 989 B - Ses yalıtım süngeri');
+  assert.equal(ws['D17'].f, 'A17&""'); assert(ws['A18'].f.includes('INDIRECT'));
   assert.deepEqual(a, { baslik: 16, ilk: 17, son: 21 });
   ws['!merges'] = merges;
   ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: a.son - 1, c: 41 } });

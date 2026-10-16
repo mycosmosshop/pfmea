@@ -290,6 +290,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
         ['FMEA Number /Version:', fmea.fmeaNumberVersion], ['FMEA Approver:', fmea.fmeaApprover], ['Company name:', fmea.companyName],
     ];
 
+    const urunHucre = fmea.productName ? `$B$${rowIndex + 3}` : undefined;   // headerDetails[2], B sütunu
     for (let i = 0; i < 4; i++) {
         writeHeaderField(rowIndex, 0, headerDetails[i][0], headerDetails[i][1]);
         writeHeaderField(rowIndex, 6, headerDetails[i+4][0], headerDetails[i+4][1]);
@@ -356,7 +357,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
         ].map(v => (v === undefined || v === null ? '' : v));
     });
     const tabloUstu = rowIndex;
-    const ayar = fmeaGovdeYaz(XLSX, ws, merges, rowIndex, satirlar, zebra);
+    const ayar = fmeaGovdeYaz(XLSX, ws, merges, rowIndex, satirlar, zebra, urunHucre);
 
     // Antet / proje bilgisi alanında çizgi eksiği kalmasın
     for (let r = 0; r < tabloUstu; r++) {

@@ -45,8 +45,8 @@ try:
     # 3) üstteki satırla aynı değer gri, ilk görünen siyah
     assert ws.Range('B18').DisplayFormat.Font.Color == 0xA6A6A6, hex(int(ws.Range('B18').DisplayFormat.Font.Color))
     assert ws.Range('B17').DisplayFormat.Font.Color != 0xA6A6A6
-    assert ws.Range('A18').HasFormula and ws.Range('G18').HasFormula and not ws.Range('A17').HasFormula
-    assert ws.Range('A17').Errors(9).Ignore and ws.Range('B19').Errors(9).Ignore, 'tablo tutarsız formül üçgeni çıkmamalı'
+    assert ws.Range('A18').HasFormula and ws.Range('G18').HasFormula and not ws.Range('B17').HasFormula and ws.Range('A17').Formula == '=$B$10&""'
+    assert ws.Range('B17').Errors(9).Ignore and ws.Range('B19').Errors(9).Ignore, 'tablo tutarsız formül üçgeni çıkmamalı'
     print('✓ 3  tekrar eden kademe değeri soluk gri (üsttekini izleyen formül); yeşil üçgen yok')
 
     # 3b) üsttekini değiştir → alttaki izleyenler de değişir; S of FE = etkideki en yüksek (n)
@@ -59,12 +59,16 @@ try:
     xl.Calculate()
     assert ws.Range('B18').Value == '[10] Giriş kontrolü' and ws.Range('B19').Value == '[20] Kesim'
     assert liste('Liste_B') == ['[10] Giriş kontrolü', '[20] Kesim', '[30] Paketleme'], liste('Liste_B')
+    ws.Range('B10').Value = '5NA 881 989 C - Yeni ad'    # başlıktaki ürün adı → Process Item + fonksiyonu
+    xl.Calculate()
+    assert all(ws.Cells(r, 1).Value == '5NA 881 989 C - Yeni ad' and ws.Cells(r, 4).Value == '5NA 881 989 C - Yeni ad' for r in range(17, 22)), \
+        [(ws.Cells(r, 1).Value, ws.Cells(r, 4).Value) for r in range(17, 22)]
     ws.Range('H17').Value = 3                       # listeden seçilen değer formülün yerine geçer
     xl.Calculate()
     assert ws.Range('H17').Value == 3 and not ws.Range('H17').HasFormula and ws.Range('H18').Value == 9
     ws.Range('G17').Value = '[E] Uyum sorunu (7)\nMüşteri reddi (5)'; ws.Range('B17').Value = '[10] Giriş kontrol'; ws.Range('H17').Value = 7
     xl.Calculate()
-    print('✓ 3b üstteki adım/etki değişince alttakiler de değişti; S = etkideki en yüksek puan (9); seçilen S formülü ezer')
+    print('✓ 3b başlıktaki ürün adı değişince Process Item + fonksiyonu 5 satırda değişti; üstteki adım/etki değişince alttakiler de değişti; S = etkideki en yüksek puan (9); seçilen S formülü ezer')
 
     # 4) Görevler: aksiyonlu 2 satır
     assert gorevler() == [(1, '[10] Giriş kontrol'), (2, '[20] Kesim')], gorevler()

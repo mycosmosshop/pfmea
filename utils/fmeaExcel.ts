@@ -6,6 +6,8 @@
 //   kullanılmış değerlerden dolar (yeni yazılan değer de listeye girer), elle yeni değer de yazılır.
 //   Üstteki satırla aynı kademe değeri (aynı üst kademe altında) formüldür, üsttekini İZLER ve soluk
 //   gri görünür: üsttekini değiştirince alttakiler de değişir. Eklenen satır üstteki değerlerle gelir.
+// - Tek Process Item varsa başlıktaki "Number/Name of product" hücresini izler; Function of the Process
+//   Item (yazılımda aynı ad) satırındaki Process Item'ı izler: ürün adı başlıkta değişince hepsi değişir.
 // - Severity (S) of FE: Failure Effect metnindeki "(7)" gibi puanların en yükseği (formül); listeden
 //   seçilen değer formülün yerine geçer.
 // - S/O/D açıklamalı listeden seçilir, AP (H/M/L) formülle hesaplanır ve renklenir.
@@ -65,7 +67,7 @@ const GOREV_SUTUN = [1, 8, 9, 14, 17, 18, 19, 20, 21, 22, 23];
 export const harf = (c: number): string => { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; };
 const sutunNo = (ad: string) => SUTUNLAR.findIndex(s => s.ad === ad);
 const TEKRAR = SUTUNLAR.map((s, i) => s.tekrar ? i : -1).filter(i => i >= 0);
-const FE = sutunNo('1. Failure Effect (FE)'), S_FE = sutunNo('Severity (S) of FE');
+const FE = sutunNo('1. Failure Effect (FE)'), S_FE = sutunNo('Severity (S) of FE'), F_ITEM = sutunNo('1. Function of the Process Item');
 /** Üstteki satırın aynı sütunundaki değer (satır ekle/sil'de kaymaz; tablonun ilk satırında boş). */
 const MIRAS = `IF(ROW()-1=ROW(${TABLO_ADI}[#Headers]),"",INDIRECT("R[-1]C",FALSE)&"")`;
 /** Failure Effect metnindeki "(n)" puanlarının en yükseği (1–10), yoksa ''. Excel formülüyle aynı kural. */
@@ -107,9 +109,10 @@ export interface FmeaPaketAyar { baslik: number; ilk: number; son: number }   //
 
 /**
  * Grup başlığı + tablo başlığı + gövdeyi ws'ye yazar (ws'de anteti üstte olan sayfa).
- * satirlar: her satırda 30 değer (S/O/D "7 – …", AP değeri). zebra: satırın gölgesi.
+ * satirlar: her satırda 30 değer (S/O/D puanı, AP değeri). zebra: satırın gölgesi.
+ * urunHucre: başlıktaki ürün adı hücresi ("$B$10"); tek Process Item varsa o sütun bu hücreyi izler.
  */
-export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number, satirlar: any[][], zebra: boolean[]): FmeaPaketAyar {
+export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number, satirlar: any[][], zebra: boolean[], urunHucre?: string): FmeaPaketAyar {
   const kenar = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
   const bas = { font: { sz: 8, color: { rgb: 'FFFFFF' }, bold: true }, fill: { fgColor: { rgb: '17365D' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: kenar };
   const govde = { font: { sz: 9 }, border: kenar, alignment: { vertical: 'top', wrapText: true } };
@@ -126,7 +129,12 @@ export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number
   ws['!rows'][baslikR] = { hpt: 48 };
 
   const ilk = baslikR + 2;                                     // Excel satır no
-  const veri = satirlar.length ? satirlar : [SUTUNLAR.map(() => '')];   // tablo en az bir satır ister
+  let veri = satirlar.length ? satirlar : [SUTUNLAR.map(() => '')];   // tablo en az bir satır ister
+  const urun = urunHucre ? ws[urunHucre.replace(/\$/g, '')]?.v : undefined;
+  const eskiAd = String(veri[0][0] ?? '');
+  const tekItem = !!urun && eskiAd !== '' && veri.every(s => String(s[0] ?? '') === eskiAd);
+  // önbellek değerleri de başlıktaki adla (Excel açılışta zaten yeniden hesaplar)
+  if (tekItem) veri = veri.map(s => s.map((v, c) => (c === 0 || c === F_ITEM) && String(v ?? '') === eskiAd ? urun : v));
   veri.forEach((satir, i) => {
     const r0 = baslikR + 1 + i, R = r0 + 1;
     // üstteki satırla aynı kademe değeri, üst kademeleri de aynıysa üsttekini izler (formül)
@@ -139,6 +147,8 @@ export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number
       if (zebra[i]) st = { ...st, fill: { fgColor: { rgb: 'F2F2F2' } } };
       let f = satirFormulu(c, R, ilk);
       if (TEKRAR.includes(c) && !miras.has(c)) f = undefined;
+      if (c === 0 && tekItem && !miras.has(0)) f = `${urunHucre}&""`;
+      if (c === F_ITEM && !miras.has(c) && satir[c] !== '' && String(satir[c]) === String(satir[0])) f = `A${R}&""`;
       if (c === S_FE && sMax === '') f = undefined;
       const v = c === S_FE && f ? sMax : c < GOREV_NO ? (satir[c] ?? '') : '';
       ws[enc(r0, c)] = f ? { f, v, t: typeof v === 'number' ? 'n' : 's', s: st } : { v, t: typeof v === 'number' ? 'n' : 's', s: st };
