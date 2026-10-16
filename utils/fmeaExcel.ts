@@ -246,6 +246,15 @@ export function fmeaSayfaXml(sayfa: string, stil: string, a: FmeaPaketAyar): { s
   return { sayfa: y, stil: st };
 }
 
+/** AP Matrisi sayfası: H/M/L hücreleri FMEA'daki AP rengiyle (dxf 0–2); harf değişirse renk de değişir. */
+export function apMatrisXml(sayfa: string): string {
+  const cf = '<conditionalFormatting sqref="C2:L101">'
+    + ['H', 'M', 'L'].map((ap, i) => `<cfRule type="cellIs" dxfId="${i}" priority="${i + 1}" operator="equal"><formula>${xe(`"${ap}"`)}</formula></cfRule>`).join('')
+    + '</conditionalFormatting>';
+  if (!sayfa.includes('</sheetData>')) throw new Error('AP Matrisi: sheetData bulunamadı');
+  return sayfa.replace('</sheetData>', '</sheetData>' + cf);
+}
+
 /** Tablo tanımı (xl/tables/table1.xml). Formüllü sütunlar "calculated column": yeni satıra kendiliğinden yazılır. */
 export function tabloXml(a: FmeaPaketAyar): string {
   const ref = `A${a.baslik}:${harf(SON_SUTUN)}${a.son}`;
@@ -272,8 +281,10 @@ export async function fmeaPaketle(zip: any, a: FmeaPaketAyar): Promise<void> {
   zip.file(relYol, rels.replace('</Relationships>', bag + '</Relationships>'));
   const ct = await zip.file('[Content_Types].xml').async('string');
   zip.file('[Content_Types].xml', ct.replace('</Types>', '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/></Types>'));
-  // Listeler / Görevler formülleri açılışta hesaplansın
   const wbx = await zip.file('xl/workbook.xml').async('string');
+  const apYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(AP_SAYFA) + 1}.xml`;
+  if (zip.file(apYol)) zip.file(apYol, apMatrisXml(await zip.file(apYol).async('string')));
+  // Listeler / Görevler formülleri açılışta hesaplansın
   zip.file('xl/workbook.xml', /<calcPr[^>]*\/>/.test(wbx)
     ? wbx.replace(/<calcPr([^>]*)\/>/, (m: string, i: string) => `<calcPr${i.replace(/\s*fullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`)
     : wbx.replace('</workbook>', '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'));

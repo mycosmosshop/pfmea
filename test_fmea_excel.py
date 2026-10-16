@@ -90,12 +90,16 @@ try:
     for S, O, D in [(10, 10, 10), (5, 8, 1), (1, 1, 1)]:
         ws.Cells(r, 8).Value = S; ws.Cells(r, 12).Value = O; ws.Cells(r, 14).Value = D
         assert ws.Cells(r, 15).DisplayFormat.Interior.Color == renk[ws.Cells(r, 15).Value]
+    A = wb.Worksheets('AP Matrisi')
+    for S, O, D in [(10, 10, 10), (5, 8, 1), (1, 1, 1), (2, 8, 5)]:
+        h = A.Cells((S - 1) * 10 + O + 1, D + 2)
+        assert h.Value == m[S - 1][O - 1][D - 1] and h.DisplayFormat.Interior.Color == renk[h.Value], (S, O, D, h.Value)
     ws.Cells(r, 25).Value = 8; ws.Cells(r, 26).Value = 2; ws.Cells(r, 27).Value = 2
     assert ws.Cells(r, 29).Value == '(' + m[7][1][1] + ')', ws.Cells(r, 29).Value
     assert ws.Cells(r, 29).DisplayFormat.Interior.Color == renk[m[7][1][1]]
     ws.Cells(r, 12).Value = None
     assert ws.Cells(r, 15).Value in (None, ''), 'O boşken AP boş olmalı'
-    print(f'✓ 7  {len(deneme)} S/O/D birleşiminde AP = matris (liste metni ve düz sayı); renk; revize AP; boşsa boş')
+    print(f'✓ 7  {len(deneme)} S/O/D birleşiminde AP = matris (liste metni ve düz sayı); renk (AP Matrisi sayfası da); revize AP; boşsa boş')
     wb.Close(False)
 finally:
     xl.Quit()

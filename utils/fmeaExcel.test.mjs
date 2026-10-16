@@ -40,7 +40,9 @@ assert(sayfa.includes('<formula1>Listeler!$D$1:$D$4</formula1>'));
 assert(sayfa.includes('AND(B18&lt;&gt;&quot;&quot;,B18=B17)'));
 assert(sayfa.includes('<tablePart r:id="rIdFmeaTablo"/>') && sayfa.includes('xmlns:r='));
 assert.equal((stil.match(/<dxf>/g) || []).length, 4);
-console.log('✓ 3  tablo (42 sütun, 14 hesaplı), 11 kademe listesi, durum listesi, ipuçları, renkler');
+const apx = E.apMatrisXml('<worksheet><sheetData></sheetData></worksheet>');
+assert(apx.includes('sqref="C2:L101"') && apx.includes('dxfId="0"') && apx.includes('&quot;L&quot;'));
+console.log('✓ 3  tablo (42 sütun, 14 hesaplı), 11 kademe listesi, durum listesi, ipuçları, renkler; AP Matrisi renkli');
 
 // 4) örnek dosya
 const lib = process.env.SODAP_LIB, cikti = process.argv[2];
