@@ -41,6 +41,10 @@ try:
     assert [H.Range(a).Value for a in ('A14', 'B14', 'I14', 'K14')] == ['Rev.00', '16.10.2026', 'CFT Team', 'Ünal Ürkmez'], [H.Range(a).Value for a in ('A14', 'B14', 'I14', 'K14')]
     assert H.Range('C15').MergeArea.Address == '$C$15:$E$15' and H.Rows(15).RowHeight > H.Rows(14).RowHeight
     assert H.PageSetup.Orientation == 2 and H.PageSetup.FitToPagesWide == 1, (H.PageSetup.Orientation, H.PageSetup.FitToPagesWide)
+    assert ws.PageSetup.PaperSize == 8 and ws.PageSetup.Orientation == 2 and ws.PageSetup.FitToPagesWide == 1, (ws.PageSetup.PaperSize, ws.PageSetup.Orientation)
+    assert G.PageSetup.PaperSize == 9 and G.PageSetup.Orientation == 2 and wb.Worksheets('AP Matrisi').PageSetup.Orientation == 1 and 'Sayfa' in ws.PageSetup.RightFooter
+    assert G.UsedRange.Rows.Count <= 2 + 2 + 30, G.UsedRange.Rows.Count
+    print('✓ 1b yazdırma: FMEA A3 yatay, Görevler/geçmiş/S-O-D A4 yatay, AP A4 dikey, 1 sayfa genişlik, altbilgide sayfa no; Görevler görev+30 satır')
     print('✓ 1a Proje Geçmişi sekmesi 2. sırada, antetli, A4 yatay 1 sayfa genişlik; revizyon satırları ve birleşik hücreler doğru')
 
     # 2) kademe listesi: üstte kullanılan değerler, tekrarsız

@@ -24,7 +24,7 @@ export const GOREV_SAYFA = 'Görevler';
 export const GECMIS_SAYFA = 'Proje Geçmişi';
 export const TABLO_ADI = 'FMEA_Tablo';
 const LISTE_SATIR = 300;          // dinamik liste uzunluğu (Listeler sayfası)
-const GOREV_SATIR = 300;          // Görevler sekmesinde hazır formül satırı
+const GOREV_BOS = 30;             // Görevler sekmesinde mevcut görevlerin altına hazır boş formül satırı
 
 type Tur = 'S' | 'O' | 'D' | 'AP' | 'APR' | 'durum';
 interface Sutun { ad: string; gen: number; tur?: Tur; liste?: boolean; tekrar?: boolean; ipucu?: string }
@@ -184,6 +184,7 @@ export function ekSayfalar(XLSX: any, wb: any, satirlar: any[][], apMatrix: any,
   const basliklar = ['No', ...GOREV_SUTUN.map(i => SUTUNLAR[i].ad)];
   basliklar.forEach((t, c) => { g[enc(1, c)] = { v: t, t: 's', s: bas }; });
   const GN = harf(GOREV_NO);
+  const GOREV_SATIR = gorevler.length + GOREV_BOS;   // baskıda boş sayfa çıkmasın diye sınırlı
   for (let k = 1; k <= GOREV_SATIR; k++) {
     const r0 = k + 1, var_ = k <= gorevler.length;
     g[enc(r0, 0)] = { f: `IF(COUNTIF(${FMEA_SAYFA}!$${GN}:$${GN},${k}),${k},"")`, v: var_ ? k : '', t: var_ ? 'n' : 's', s: govde };
@@ -313,11 +314,15 @@ export function fmeaSayfaXml(sayfa: string, stil: string, a: FmeaPaketAyar): { s
 }
 
 /** AP Matrisi sayfası: H/M/L hücreleri FMEA'daki AP rengiyle (dxf 0–2); harf değişirse renk de değişir. */
-/** Yazdırma: A4 yatay, 1 sayfa genişliğe sığdır (antetli form sayfaları için). */
-export function yatayA4Xml(sayfa: string): string {
-  const ayar = '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
-    + '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
-  let y = sayfa.replace(/<pageMargins[^>]*\/>/, '').replace(/<pageSetup[^>]*\/>/, '');
+/**
+ * Yazdırma / PDF: kâğıt, yön, 1 sayfa genişliğe sığdır, altbilgide doküman + sayfa no.
+ * Excel'in kendi "PDF olarak dışa aktar"ı (sekmeler Ctrl ile seçilerek) ERP'deki PDF düzenini verir.
+ */
+export function sayfaDuzeniXml(sayfa: string, kagit: 'a3' | 'a4' = 'a4', yon: 'landscape' | 'portrait' = 'landscape'): string {
+  const ayar = '<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.5" header="0.2" footer="0.25"/>'
+    + `<pageSetup paperSize="${kagit === 'a3' ? 8 : 9}" orientation="${yon}" fitToWidth="1" fitToHeight="0"/>`
+    + '<headerFooter><oddFooter>&amp;L&amp;8Sanifoam  FR 34 / Rev 4&amp;C&amp;8&amp;A&amp;R&amp;8Sayfa &amp;P / &amp;N</oddFooter></headerFooter>';
+  let y = sayfa.replace(/<pageMargins[^>]*\/>/, '').replace(/<pageSetup[^>]*\/>/, '').replace(/<headerFooter[\s\S]*?<\/headerFooter>/, '');
   y = /<sheetPr\b/.test(y) ? y : y.replace('<dimension', '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension');
   return y.replace(/(<headerFooter|<ignoredErrors|<drawing|<legacyDrawing|<tableParts|<\/worksheet>)/, ayar + '$1');
 }
@@ -357,14 +362,21 @@ export async function fmeaPaketle(zip: any, a: FmeaPaketAyar): Promise<void> {
   const ct = await zip.file('[Content_Types].xml').async('string');
   zip.file('[Content_Types].xml', ct.replace('</Types>', '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/></Types>'));
   const wbx = await zip.file('xl/workbook.xml').async('string');
-  const apYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(AP_SAYFA) + 1}.xml`;
-  if (zip.file(apYol)) zip.file(apYol, apMatrisXml(await zip.file(apYol).async('string')));
-  const gYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(GECMIS_SAYFA) + 1}.xml`;
-  if (zip.file(gYol)) zip.file(gYol, yatayA4Xml(await zip.file(gYol).async('string')));
-  const sYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(SOD_SAYFA) + 1}.xml`;
-  if (zip.file(sYol)) zip.file(sYol, yatayA4Xml(await zip.file(sYol).async('string')));
+  const adlar = [...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]);
+  const isle = async (ad: string, f: (x: string) => string) => {
+    const yol = `xl/worksheets/sheet${adlar.indexOf(ad) + 1}.xml`;
+    if (adlar.includes(ad) && zip.file(yol)) zip.file(yol, f(await zip.file(yol).async('string')));
+  };
+  await isle(AP_SAYFA, x => sayfaDuzeniXml(apMatrisXml(x), 'a4', 'portrait'));
+  await isle(FMEA_SAYFA, x => sayfaDuzeniXml(x, 'a3', 'landscape'));
+  await isle(GECMIS_SAYFA, x => sayfaDuzeniXml(x));
+  await isle(GOREV_SAYFA, x => sayfaDuzeniXml(x));
+  await isle(SOD_SAYFA, x => sayfaDuzeniXml(x));
+  // Not: tekrar eden başlık / baskı alanı (_xlnm.Print_Titles / Print_Area) Türkçe Excel 2019'da dosyadan
+  // okunmuyor (openpyxl çıktısı da öyle); düz ad olarak kalıp dosyayı kirletiyordu → eklenmiyor.
+  const wbx2 = wbx;
   // Listeler / Görevler formülleri açılışta hesaplansın
-  zip.file('xl/workbook.xml', /<calcPr[^>]*\/>/.test(wbx)
-    ? wbx.replace(/<calcPr([^>]*)\/>/, (m: string, i: string) => `<calcPr${i.replace(/\s*fullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`)
-    : wbx.replace('</workbook>', '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'));
+  zip.file('xl/workbook.xml', /<calcPr[^>]*\/>/.test(wbx2)
+    ? wbx2.replace(/<calcPr([^>]*)\/>/, (m: string, i: string) => `<calcPr${i.replace(/\s*fullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`)
+    : wbx2.replace('</workbook>', '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'));
 }
