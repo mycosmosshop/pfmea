@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { writeSanifoamAntet, fmeaIndir, projeGecmisiSayfasi } from '../utils/excelExport';
 import { sodPuan } from '../utils/sodAp';
 import { fmeaGovdeYaz, ekSayfalar, FMEA_SAYFA, FMEA_SON_SUTUN, GECMIS_SAYFA } from '../utils/fmeaExcel';
 import { initialApMatrix } from '../utils/ap-matrix';
+import { fmeaPdfOlustur, pdfFontYukle, PDF_SAYFALAR, type PdfSayfa } from '../utils/fmeaPdf';
 import { vdaSeverityData } from './SeverityModal';
 import { aiagVdaOccurrenceData } from './OccurrenceModal';
 import { aiagVdaData } from './DetectionModal';
@@ -229,6 +230,89 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     });
   };
 
+  // Excel ve PDF aynı satırları kullanır
+  const ANTET = { docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1' };   // FMEA + Proje Geçmişi sayfası
+  const fmeaSatirlari = () => {
+      // --- GÖVDE: Excel TABLOSU (satır ekle/sil, kademe listeleri, Görevler sekmesi) — utils/fmeaExcel.ts ---
+      let isZebra = false;
+      let lastStepId: string | null = null;
+      const zebra: boolean[] = [];
+      const satirlar = rows.map(row => {
+          const { item, step, func, mode, cause, effects, isFirstStepRow } = row;
+          if (isFirstStepRow && step.id !== lastStepId) { isZebra = !isZebra; lastStepId = step.id; }
+          zebra.push(isZebra);
+          const preventionActions = cause?.actions?.filter(a => a.type === 'prevention') || [];
+          const detectionActions = cause?.actions?.filter(a => a.type === 'detection') || [];
+          // Her satır tam değer taşır (birleşik hücre yok): tablo süzülür/sıralanır, satır eklenip silinir.
+          return [
+              item.name,
+              `[${step.operationNumber}] ${step.name}`,
+              cause?.processWorkElement,
+              item.name,
+              func ? `${func.name}\n${func.productCharacteristic || ''}`.trim() : '',
+              cause?.workElementFunction,
+              effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'),
+              sodPuan(cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)),
+              mode?.description,
+              cause?.description,
+              cause?.preventionControl,
+              sodPuan(cause?.occurrence),
+              cause?.detectionControl,
+              sodPuan(cause?.detection),
+              cause?.actionPriority,
+              clsLabel(rowClsSymbol(func, cause)),
+              cause?.filterCode,
+              joinActionDetails(preventionActions, 'description'),
+              joinActionDetails(detectionActions, 'description'),
+              joinActionDetails(cause?.actions, 'responsiblePerson'),
+              joinActionDetails(cause?.actions, 'targetCompletionDate'),
+              joinActionDetails(cause?.actions, 'status'),
+              joinActionDetails(cause?.actions, 'actionTaken'),
+              joinActionDetails(cause?.actions, 'completionDate'),
+              sodPuan(cause?.revisedSeverity),
+              sodPuan(cause?.revisedOccurrence),
+              sodPuan(cause?.revisedDetection),
+              clsLabel(rowClsSymbol(func, cause)),
+              cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
+              cause?.remarks,
+          ].map(v => (v === undefined || v === null ? '' : v));
+      });
+      return { satirlar, zebra };
+  };
+  const kriterSatirlari = () => {
+      // S-O-D kriter tabloları (açılır listenin ipucu bu sayfayı gösterir)
+      const kriter: any[][] = [['ŞİDDET (S) — AIAG-VDA PFMEA'], ['S', 'Etki', 'Tesis içi (plant)', 'Sevk / müşteri tesisi', 'Son kullanıcı']];
+      vdaSeverityData.forEach(x => kriter.push([x.s, x.effect, x.plant, x.ship, x.user]));
+      kriter.push([], ['OLUŞMA (O)'], ['O', 'Olasılık', 'Sıklık']);
+      aiagVdaOccurrenceData.forEach(x => kriter.push([x.scale, x.probability, x.frequency]));
+      kriter.push([], ['TESPİT (D)'], ['D', 'Tespit yeteneği', 'Yöntem olgunluğu', 'Tespit fırsatı']);
+      aiagVdaData.forEach(x => kriter.push([x.d, x.ability, x.maturity, x.opportunity]));
+      return kriter;
+  };
+
+  const [pdfAcik, setPdfAcik] = useState(false);
+  const [pdfSecim, setPdfSecim] = useState<PdfSayfa[]>(PDF_SAYFALAR.map(x => x.key));
+  const [pdfMesgul, setPdfMesgul] = useState(false);
+  const handlePdfTumu = async () => {
+    if (!pdfSecim.length) return;
+    setPdfMesgul(true);
+    try {
+      const font = await pdfFontYukle();
+      const { satirlar, zebra } = fmeaSatirlari();
+      const doc = fmeaPdfOlustur(jspdf.jsPDF, {
+        secim: PDF_SAYFALAR.map(x => x.key).filter(k => pdfSecim.includes(k)), fmea: projectData.fmea, history: projectData.history,
+        satirlar, zebra, apMatrix: apMatrix || initialApMatrix, kriter: kriterSatirlari(), antet: ANTET, font,
+      });
+      doc.save(`${projectData.fmea.project || 'fmea'}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      setPdfAcik(false);
+    } catch (e: any) {
+      console.error(e);
+      alert('PDF oluşturulamadı: ' + (e?.message || e));
+    } finally {
+      setPdfMesgul(false);
+    }
+  };
+
   const handleExportToExcel = () => {
     const encodeCell = (r: number, c: number) => XLSX.utils.encode_cell({ r, c });
 
@@ -266,7 +350,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     };
     
     // --- SANIFOAM ANTET (paylaşılan helper) — Rev 7, Yürürlük 02.01.2025 ---
-    const antet = { docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1' };   // FMEA + Proje Geçmişi sayfası
+    const antet = ANTET;
     rowIndex = writeSanifoamAntet(ws, merges, {
         ...antet, title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)', lastCol: 29,
     });
@@ -312,50 +396,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     }
     rowIndex++;
 
-    // --- GÖVDE: Excel TABLOSU (satır ekle/sil, kademe listeleri, Görevler sekmesi) — utils/fmeaExcel.ts ---
-    let isZebra = false;
-    let lastStepId: string | null = null;
-    const zebra: boolean[] = [];
-    const satirlar = rows.map(row => {
-        const { item, step, func, mode, cause, effects, isFirstStepRow } = row;
-        if (isFirstStepRow && step.id !== lastStepId) { isZebra = !isZebra; lastStepId = step.id; }
-        zebra.push(isZebra);
-        const preventionActions = cause?.actions?.filter(a => a.type === 'prevention') || [];
-        const detectionActions = cause?.actions?.filter(a => a.type === 'detection') || [];
-        // Her satır tam değer taşır (birleşik hücre yok): tablo süzülür/sıralanır, satır eklenip silinir.
-        return [
-            item.name,
-            `[${step.operationNumber}] ${step.name}`,
-            cause?.processWorkElement,
-            item.name,
-            func ? `${func.name}\n${func.productCharacteristic || ''}`.trim() : '',
-            cause?.workElementFunction,
-            effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'),
-            sodPuan(cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)),
-            mode?.description,
-            cause?.description,
-            cause?.preventionControl,
-            sodPuan(cause?.occurrence),
-            cause?.detectionControl,
-            sodPuan(cause?.detection),
-            cause?.actionPriority,
-            clsLabel(rowClsSymbol(func, cause)),
-            cause?.filterCode,
-            joinActionDetails(preventionActions, 'description'),
-            joinActionDetails(detectionActions, 'description'),
-            joinActionDetails(cause?.actions, 'responsiblePerson'),
-            joinActionDetails(cause?.actions, 'targetCompletionDate'),
-            joinActionDetails(cause?.actions, 'status'),
-            joinActionDetails(cause?.actions, 'actionTaken'),
-            joinActionDetails(cause?.actions, 'completionDate'),
-            sodPuan(cause?.revisedSeverity),
-            sodPuan(cause?.revisedOccurrence),
-            sodPuan(cause?.revisedDetection),
-            clsLabel(rowClsSymbol(func, cause)),
-            cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
-            cause?.remarks,
-        ].map(v => (v === undefined || v === null ? '' : v));
-    });
+    const { satirlar, zebra } = fmeaSatirlari();
     const tabloUstu = rowIndex;
     const ayar = fmeaGovdeYaz(XLSX, ws, merges, rowIndex, satirlar, zebra, urunHucre);
 
@@ -373,13 +414,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     XLSX.utils.book_append_sheet(wb, ws, FMEA_SAYFA);
     projeGecmisiSayfasi(wb, GECMIS_SAYFA, fmea, projectData.history, antet);
 
-    // S-O-D kriter tabloları (açılır listenin ipucu bu sayfayı gösterir)
-    const kriter: any[][] = [['ŞİDDET (S) — AIAG-VDA PFMEA'], ['S', 'Etki', 'Tesis içi (plant)', 'Sevk / müşteri tesisi', 'Son kullanıcı']];
-    vdaSeverityData.forEach(x => kriter.push([x.s, x.effect, x.plant, x.ship, x.user]));
-    kriter.push([], ['OLUŞMA (O)'], ['O', 'Olasılık', 'Sıklık']);
-    aiagVdaOccurrenceData.forEach(x => kriter.push([x.scale, x.probability, x.frequency]));
-    kriter.push([], ['TESPİT (D)'], ['D', 'Tespit yeteneği', 'Yöntem olgunluğu', 'Tespit fırsatı']);
-    aiagVdaData.forEach(x => kriter.push([x.d, x.ability, x.maturity, x.opportunity]));
+    const kriter = kriterSatirlari();
     ekSayfalar(XLSX, wb, satirlar, apMatrix || initialApMatrix, kriter);
 
     fmeaIndir(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`, ayar);
@@ -777,6 +812,13 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
             >
                 Export to Excel (.xlsx)
             </button>
+            <button
+                onClick={() => setPdfAcik(true)}
+                className="px-4 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-red-700 hover:bg-red-800 shadow-sm"
+                title="Excel'deki sayfaları (FMEA, Proje Geçmişi, Görevler, S-O-D, AP Matrisi) antetli tek PDF yapar"
+            >
+                PDF (tüm sayfalar)
+            </button>
             <button 
                 onClick={handleExportToPdf} 
                 className="px-4 py-2 text-sm font-semibold rounded-md transition-colors duration-200 text-white bg-red-600 hover:bg-red-700 shadow-sm"
@@ -784,6 +826,28 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
                 Export to PDF
             </button>
       </div>
+        {pdfAcik && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 print:hidden" onClick={() => !pdfMesgul && setPdfAcik(false)}>
+                <div className="bg-white rounded-lg shadow-xl p-5 w-80" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-base font-bold text-gray-800 mb-1">PDF'e eklenecek sayfalar</h3>
+                    <p className="text-xs text-gray-500 mb-3">Seçilenler bu sırayla, antetli tek PDF olur.</p>
+                    {PDF_SAYFALAR.map(x => (
+                        <label key={x.key} className="flex items-center gap-2 py-1 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" checked={pdfSecim.includes(x.key)}
+                                onChange={e => setPdfSecim(sec => e.target.checked ? [...sec, x.key] : sec.filter(k => k !== x.key))} />
+                            {x.ad}
+                        </label>
+                    ))}
+                    <div className="flex justify-end gap-2 mt-4">
+                        <button onClick={() => setPdfAcik(false)} disabled={pdfMesgul} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-50">Vazgeç</button>
+                        <button onClick={handlePdfTumu} disabled={pdfMesgul || !pdfSecim.length}
+                            className="px-3 py-1.5 text-sm font-semibold rounded-md text-white bg-red-700 hover:bg-red-800 disabled:opacity-50">
+                            {pdfMesgul ? 'Hazırlanıyor…' : 'PDF oluştur'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
