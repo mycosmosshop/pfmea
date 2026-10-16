@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
-import { writeSanifoamAntet, fmeaIndir } from '../utils/excelExport';
+import { writeSanifoamAntet, fmeaIndir, projeGecmisiSayfasi } from '../utils/excelExport';
 import { sodPuan } from '../utils/sodAp';
-import { fmeaGovdeYaz, ekSayfalar, FMEA_SAYFA, FMEA_SON_SUTUN } from '../utils/fmeaExcel';
+import { fmeaGovdeYaz, ekSayfalar, FMEA_SAYFA, FMEA_SON_SUTUN, GECMIS_SAYFA } from '../utils/fmeaExcel';
 import { initialApMatrix } from '../utils/ap-matrix';
 import { vdaSeverityData } from './SeverityModal';
 import { aiagVdaOccurrenceData } from './OccurrenceModal';
@@ -266,9 +266,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     };
     
     // --- SANIFOAM ANTET (paylaşılan helper) — Rev 7, Yürürlük 02.01.2025 ---
+    const antet = { docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1' };   // FMEA + Proje Geçmişi sayfası
     rowIndex = writeSanifoamAntet(ws, merges, {
-        title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)',
-        docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1', lastCol: 29,
+        ...antet, title: 'PROCESS FAILURE MODES & EFFECTS ANALYSIS\n(PROSES FMEA)', lastCol: 29,
     });
 
     // --- MAIN TITLE ---
@@ -371,6 +371,7 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, FMEA_SAYFA);
+    projeGecmisiSayfasi(wb, GECMIS_SAYFA, fmea, projectData.history, antet);
 
     // S-O-D kriter tabloları (açılır listenin ipucu bu sayfayı gösterir)
     const kriter: any[][] = [['ŞİDDET (S) — AIAG-VDA PFMEA'], ['S', 'Etki', 'Tesis içi (plant)', 'Sevk / müşteri tesisi', 'Son kullanıcı']];

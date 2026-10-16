@@ -102,6 +102,56 @@ export function writeProjectInfoLine(ws: { [k: string]: any }, merges: any[], ro
   return row + 2; // bilgi satırı + 1 boş satır
 }
 
+// "Project History" sayfasını antetli ayrı sekme olarak wb'ye ekler (ekranla aynı: genel bilgiler + revizyon tablosu).
+// 12 sütun: antet yardımcısı dar tabloda orta başlığı sıfırlıyor; geniş alanlar birleşik hücre.
+export function projeGecmisiSayfasi(wb: any, sayfaAdi: string, fmea: any, history: any[] | undefined, antet: Omit<AntetOptions, 'title' | 'lastCol'>): void {
+  const SON = 11;
+  const ws: { [k: string]: any } = {};
+  const merges: any[] = [];
+  const kutu = (r: number, c0: number, c1: number, v: any, s: any) => {
+    ws[encCell(r, c0)] = { v: v ?? '', t: 's', s };
+    for (let c = c0 + 1; c <= c1; c++) ws[encCell(r, c)] = { v: '', t: 's', s };
+    if (c1 > c0) merges.push({ s: { r, c: c0 }, e: { r, c: c1 } });
+  };
+  const tarih = (t?: string) => /^\d{4}-\d{2}-\d{2}$/.test(t || '') ? t!.split('-').reverse().join('.') : (t || '');
+  const satirYuk = (r: number, ...metin: [string, number][]) => {
+    const n = Math.max(1, ...metin.map(([m, gen]) => String(m || '').split('\n').reduce((t, s) => t + Math.max(1, Math.ceil(s.length / gen)), 0)));
+    ws['!rows'][r] = { hpt: Math.max(18, n * 12 + 4) };
+  };
+
+  let r = writeSanifoamAntet(ws, merges, { ...antet, title: 'PFMEA DEĞİŞİKLİK GEÇMİŞİ\n(PFMEA HISTORY)', lastCol: SON });
+  const anahtar = { ...infoLineStyle, alignment: { ...infoLineStyle.alignment, horizontal: 'right' } };
+  kutu(r++, 0, SON, 'Genel Bilgiler', { ...infoLineStyle, fill: { fgColor: { rgb: 'DDEBF7' } } });
+  const bilgi: [string, string, string, string][] = [
+    ['Firma Adı', fmea.companyName, 'Müşteri', fmea.client],
+    ['Parça Adı / No', fmea.productName, 'Proje / Referans', fmea.project],
+    ['FMEA No / Versiyon', fmea.fmeaNumberVersion, 'Oluşturma Tarihi', tarih(fmea.firstFmeaDate)],
+    ['Son Revizyon Tarihi', tarih(fmea.lastRevisionDate), 'Ekip', fmea.teamMembers],
+  ];
+  bilgi.forEach(([k1, v1, k2, v2]) => {
+    kutu(r, 0, 1, k1 + ':', anahtar); kutu(r, 2, 4, v1, bodyStyle);
+    kutu(r, 5, 6, k2 + ':', anahtar); kutu(r, 7, SON, v2, bodyStyle);
+    satirYuk(r, [v1, 60], [v2, 50]); r++;
+  });
+  r++;
+  kutu(r++, 0, SON, '1. PFMEA Geçmişi (PFMEA History)', { ...infoLineStyle, fill: { fgColor: { rgb: 'DDEBF7' } } });
+  const SUT: [string, number, number][] = [['Revizyon', 0, 0], ['Tarih', 1, 1], ['Değişiklik Açıklaması', 2, 4], ['Değişiklik Nedeni', 5, 7], ['Hazırlayan', 8, 9], ['Onaylayan', 10, 11]];
+  SUT.forEach(([t, c0, c1]) => kutu(r, c0, c1, t, headerBandStyle));
+  ws['!rows'][r++] = { hpt: 22 };
+  const kayit = history || [];
+  if (!kayit.length) kutu(r++, 0, SON, 'Henüz revizyon kaydı yok.', bodyCenterStyle);
+  kayit.forEach(h => {
+    const deger = [h.revision, tarih(h.date), h.changeDescription, h.changeReason, h.preparedBy, h.approvedBy];
+    SUT.forEach(([, c0, c1], i) => kutu(r, c0, c1, deger[i], i < 2 ? bodyCenterStyle : bodyStyle));
+    satirYuk(r, [h.changeDescription, 62], [h.changeReason, 42]); r++;
+  });
+
+  ws['!merges'] = merges;
+  ws['!cols'] = [10, 12, 22, 22, 22, 15, 15, 15, 9, 9, 9, 9].map(wch => ({ wch }));
+  ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: SON, r: r - 1 } });
+  XLSX.utils.book_append_sheet(wb, ws, sayfaAdi);
+}
+
 declare const JSZip: any;
 
 // !merges, !cols, !ref ayarlar ve dosyayı indirir.

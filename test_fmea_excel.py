@@ -34,6 +34,14 @@ try:
     assert L.Range('B4').Value == 4 and L.Range('B4').Text.startswith('4 – Orta'), (L.Range('B4').Value, L.Range('B4').Text)
     assert ws.Range('H17').Value == 7 and ws.Range('H17').Text == '7', 'S hücresi yalnız sayı göstermeli'
     print('✓ 1  FMEA_Tablo açılıyor (5 satır), Listeler gizli; liste kaynağı 4 = "4 – Orta…" görünüyor, hücrede yalnız 7')
+    H = wb.Worksheets('Proje Geçmişi')
+    assert wb.Worksheets(2).Name == 'Proje Geçmişi' and H.Visible == -1
+    assert H.Range('A1').Value == 'Sanifoam' and H.Range('A1').MergeArea.Address == '$A$1:$B$4'
+    assert H.Range('C2').Value.startswith('PFMEA DEĞİŞİKLİK GEÇMİŞİ') and H.Range('C2').MergeArea.Address == '$C$2:$H$4'
+    assert [H.Range(a).Value for a in ('A14', 'B14', 'I14', 'K14')] == ['Rev.00', '16.10.2026', 'CFT Team', 'Ünal Ürkmez'], [H.Range(a).Value for a in ('A14', 'B14', 'I14', 'K14')]
+    assert H.Range('C15').MergeArea.Address == '$C$15:$E$15' and H.Rows(15).RowHeight > H.Rows(14).RowHeight
+    assert H.PageSetup.Orientation == 2 and H.PageSetup.FitToPagesWide == 1, (H.PageSetup.Orientation, H.PageSetup.FitToPagesWide)
+    print('✓ 1a Proje Geçmişi sekmesi 2. sırada, antetli, A4 yatay 1 sayfa genişlik; revizyon satırları ve birleşik hücreler doğru')
 
     # 2) kademe listesi: üstte kullanılan değerler, tekrarsız
     assert liste('Liste_B') == ['[10] Giriş kontrol', '[20] Kesim', '[30] Paketleme'], liste('Liste_B')

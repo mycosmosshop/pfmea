@@ -21,6 +21,7 @@ import { apFormulu, apMatrisSatirlari, sodBicim, AP_SAYFA, SOD_SAYFA, LISTE_SAYF
 
 export const FMEA_SAYFA = 'FMEA';
 export const GOREV_SAYFA = 'Görevler';
+export const GECMIS_SAYFA = 'Proje Geçmişi';
 export const TABLO_ADI = 'FMEA_Tablo';
 const LISTE_SATIR = 300;          // dinamik liste uzunluğu (Listeler sayfası)
 const GOREV_SATIR = 300;          // Görevler sekmesinde hazır formül satırı
@@ -283,6 +284,15 @@ export function fmeaSayfaXml(sayfa: string, stil: string, a: FmeaPaketAyar): { s
 }
 
 /** AP Matrisi sayfası: H/M/L hücreleri FMEA'daki AP rengiyle (dxf 0–2); harf değişirse renk de değişir. */
+/** Yazdırma: A4 yatay, 1 sayfa genişliğe sığdır (antetli form sayfaları için). */
+export function yatayA4Xml(sayfa: string): string {
+  const ayar = '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
+    + '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
+  let y = sayfa.replace(/<pageMargins[^>]*\/>/, '').replace(/<pageSetup[^>]*\/>/, '');
+  y = /<sheetPr\b/.test(y) ? y : y.replace('<dimension', '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension');
+  return y.replace(/(<headerFooter|<ignoredErrors|<drawing|<legacyDrawing|<tableParts|<\/worksheet>)/, ayar + '$1');
+}
+
 export function apMatrisXml(sayfa: string): string {
   const cf = '<conditionalFormatting sqref="C2:L101">'
     + ['H', 'M', 'L'].map((ap, i) => `<cfRule type="cellIs" dxfId="${i}" priority="${i + 1}" operator="equal"><formula>${xe(`"${ap}"`)}</formula></cfRule>`).join('')
@@ -320,6 +330,8 @@ export async function fmeaPaketle(zip: any, a: FmeaPaketAyar): Promise<void> {
   const wbx = await zip.file('xl/workbook.xml').async('string');
   const apYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(AP_SAYFA) + 1}.xml`;
   if (zip.file(apYol)) zip.file(apYol, apMatrisXml(await zip.file(apYol).async('string')));
+  const gYol = `xl/worksheets/sheet${[...wbx.matchAll(/<sheet [^>]*name="([^"]*)"/g)].map(m => m[1]).indexOf(GECMIS_SAYFA) + 1}.xml`;
+  if (zip.file(gYol)) zip.file(gYol, yatayA4Xml(await zip.file(gYol).async('string')));
   // Listeler / Görevler formülleri açılışta hesaplansın
   zip.file('xl/workbook.xml', /<calcPr[^>]*\/>/.test(wbx)
     ? wbx.replace(/<calcPr([^>]*)\/>/, (m: string, i: string) => `<calcPr${i.replace(/\s*fullCalcOnLoad="[^"]*"/, '')} fullCalcOnLoad="1"/>`)

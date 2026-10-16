@@ -82,7 +82,21 @@ if (lib && cikti) {
   ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: a.son - 1, c: 41 } });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, E.FMEA_SAYFA);
+  // Proje Geçmişi sekmesi (antetli) — excelExport global XLSX kullanır
+  globalThis.XLSX = XLSX;
+  const X = await yukle('utils/excelExport.ts');
+  X.projeGecmisiSayfasi(wb, E.GECMIS_SAYFA, { companyName: 'Sanifoam', client: 'BROSE SITECH GmbH', productName: '5NA 881 989', project: 'Test PFMEA',
+    fmeaNumberVersion: 'FR34 / Rev.01', firstFmeaDate: '2026-10-16', lastRevisionDate: '2026-10-16', teamMembers: 'CFT' },
+    [{ revision: 'Rev.00', date: '2026-10-16', changeDescription: 'İlk yayın', changeReason: 'Yeni ürün', preparedBy: 'CFT Team', approvedBy: 'Ünal Ürkmez' },
+     { revision: 'Rev.01', date: '2026-11-02', changeDescription: 'Uzun açıklama '.repeat(12), changeReason: 'Müşteri talebi', preparedBy: 'CFT Team', approvedBy: 'Ünal Ürkmez' }],
+    { docNo: 'FR 34', rev: '4', date: '02.01.2025', sayfa: '1/1' });
+  const g = wb.Sheets['Proje Geçmişi'];
+  assert.equal(g.A1.v, 'Sanifoam'); assert.equal(g.C2.v, 'PFMEA DEĞİŞİKLİK GEÇMİŞİ\n(PFMEA HISTORY)');
+  assert.equal(g.A14.v, 'Rev.00'); assert.equal(g.B14.v, '16.10.2026'); assert.equal(g.C15.v.trim().split(' ')[0], 'Uzun');
+  assert(g['!rows'][14].hpt > g['!rows'][13].hpt, 'uzun açıklamalı satır daha yüksek');
   E.ekSayfalar(XLSX, wb, satirlar, initialApMatrix, [['ŞİDDET (S)'], ['S', 'Etki']]);
+  assert.equal(wb.SheetNames.slice(0, 3).join('|'), [E.FMEA_SAYFA, 'Proje Geçmişi', 'Görevler'].join('|'));
+  console.log('✓ 4a Proje Geçmişi sekmesi antetli, FMEA\'dan sonra; tarih gg.aa.yyyy; uzun satır yüksek');
   const zip = await JSZip.loadAsync(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
   await E.fmeaPaketle(zip, a);
   fs.writeFileSync(cikti, await zip.generateAsync({ type: 'nodebuffer' }));
