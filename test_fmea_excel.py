@@ -45,7 +45,26 @@ try:
     # 3) üstteki satırla aynı değer gri, ilk görünen siyah
     assert ws.Range('B18').DisplayFormat.Font.Color == 0xA6A6A6, hex(int(ws.Range('B18').DisplayFormat.Font.Color))
     assert ws.Range('B17').DisplayFormat.Font.Color != 0xA6A6A6
-    print('✓ 3  tekrar eden kademe değeri soluk gri')
+    assert ws.Range('A18').HasFormula and ws.Range('G18').HasFormula and not ws.Range('A17').HasFormula
+    assert ws.Range('A17').Errors(9).Ignore and ws.Range('B19').Errors(9).Ignore, 'tablo tutarsız formül üçgeni çıkmamalı'
+    print('✓ 3  tekrar eden kademe değeri soluk gri (üsttekini izleyen formül); yeşil üçgen yok')
+
+    # 3b) üsttekini değiştir → alttaki izleyenler de değişir; S of FE = etkideki en yüksek (n)
+    assert ws.Range('H17').HasFormula and ws.Range('H17').Value == 7 and ws.Range('H18').Value == 7
+    ws.Range('G17').Value = '[E] Uyum sorunu (6)\nMüşteri reddi (9)\nHurda (4)'
+    xl.Calculate()
+    assert ws.Range('G18').Value == ws.Range('G17').Value and ws.Range('H17').Value == 9 and ws.Range('H18').Value == 9, (ws.Range('H17').Value, ws.Range('H18').Value)
+    assert ws.Range('O17').Value == m[8][2][2], (ws.Range('O17').Value, m[8][2][2])      # AP yeni S=9 ile
+    ws.Range('B17').Value = '[10] Giriş kontrolü'
+    xl.Calculate()
+    assert ws.Range('B18').Value == '[10] Giriş kontrolü' and ws.Range('B19').Value == '[20] Kesim'
+    assert liste('Liste_B') == ['[10] Giriş kontrolü', '[20] Kesim', '[30] Paketleme'], liste('Liste_B')
+    ws.Range('H17').Value = 3                       # listeden seçilen değer formülün yerine geçer
+    xl.Calculate()
+    assert ws.Range('H17').Value == 3 and not ws.Range('H17').HasFormula and ws.Range('H18').Value == 9
+    ws.Range('G17').Value = '[E] Uyum sorunu (7)\nMüşteri reddi (5)'; ws.Range('B17').Value = '[10] Giriş kontrol'; ws.Range('H17').Value = 7
+    xl.Calculate()
+    print('✓ 3b üstteki adım/etki değişince alttakiler de değişti; S = etkideki en yüksek puan (9); seçilen S formülü ezer')
 
     # 4) Görevler: aksiyonlu 2 satır
     assert gorevler() == [(1, '[10] Giriş kontrol'), (2, '[20] Kesim')], gorevler()
@@ -55,6 +74,7 @@ try:
     yeni = t.ListRows.Add().Range
     r = yeni.Row
     assert ws.Cells(r, 15).HasFormula and ws.Cells(r, 31).HasFormula, 'yeni satırda formül yok'
+    assert ws.Cells(r, 1).Value == ws.Cells(r - 1, 1).Value and ws.Cells(r, 2).Value == '[30] Paketleme', 'yeni satır üstteki değerlerle gelmeli'
     assert ws.Cells(r, 8).Validation.Type == 3 and ws.Cells(r, 2).Validation.Formula1 == '=Liste_B'
     ws.Cells(r, 2).Value = '[40] Sevkiyat'
     ws.Cells(r, 8).Value = L.Range('A8').Value          # S = 8 (listeden)
@@ -70,12 +90,17 @@ try:
     # 6) araya satır ekle, aksiyonlu satırı sil → Görevler yeniden sıralanır
     t.ListRows.Add(2)
     assert ws.Cells(18, 15).HasFormula and ws.Cells(18, 31).HasFormula
+    assert ws.Cells(18, 2).Value == '[10] Giriş kontrol' and ws.Cells(18, 8).Value == 7, (ws.Cells(18, 2).Value, ws.Cells(18, 8).Value)
+    t.ListRows.Add(1)                               # en üste eklenen satır başlığı almamalı
+    assert ws.Cells(17, 1).Value in (None, ''), ws.Cells(17, 1).Value
+    t.ListRows(1).Delete()
     sil = next(i for i in range(1, t.ListRows.Count + 1) if t.ListRows(i).Range.Cells(1, 18).Value)
     t.ListRows(sil).Delete()
     xl.Calculate()
     g = gorevler()
     assert [n for n, _ in g] == [1, 2] and g[0][1] == '[20] Kesim' and g[1][1] == '[40] Sevkiyat', g
-    print('✓ 6  araya eklenen satır formüllü; aksiyonlu satır silinince Görevler 1, 2 diye yeniden sıralandı')
+    assert all(isinstance(ws.Cells(r, 2).Value, str) and not ws.Cells(r, 2).Text.startswith('#') for r in range(17, 17 + t.ListRows.Count))
+    print('✓ 6  araya eklenen satır üstteki değerlerle ve formüllü; satır silinince #BAŞV yok; aksiyonlu satır silinince Görevler 1, 2 diye yeniden sıralandı')
     # 7) AP: 308 S/O/D birleşiminde matrisle aynı; "7 – …" metni ve düz sayı; renk
     import random
     random.seed(7)

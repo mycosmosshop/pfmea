@@ -4,7 +4,10 @@
 //   açılır listeler ve renkler yeni satıra kendiliğinden geçer. Başlıkta süzgeç var.
 // - Kademe sütunları (adım, fonksiyon, etki, hata türü, kontroller, sorumlu): açılır liste ÜSTTE
 //   kullanılmış değerlerden dolar (yeni yazılan değer de listeye girer), elle yeni değer de yazılır.
-//   Bir önceki satırla aynı değer soluk gri görünür (eski birleşik hücre görüntüsü).
+//   Üstteki satırla aynı kademe değeri (aynı üst kademe altında) formüldür, üsttekini İZLER ve soluk
+//   gri görünür: üsttekini değiştirince alttakiler de değişir. Eklenen satır üstteki değerlerle gelir.
+// - Severity (S) of FE: Failure Effect metnindeki "(7)" gibi puanların en yükseği (formül); listeden
+//   seçilen değer formülün yerine geçer.
 // - S/O/D açıklamalı listeden seçilir, AP (H/M/L) formülle hesaplanır ve renklenir.
 // - Her sütunda "buraya ne yazılır" ipucu (hücre seçilince çıkar).
 // - "Görevler" sekmesi önleyici/tespit aksiyonu yazılan satırlardan otomatik dolar; aksiyon
@@ -24,7 +27,7 @@ interface Sutun { ad: string; gen: number; tur?: Tur; liste?: boolean; tekrar?: 
 
 // Sütun adları tablo başlığıdır: BENZERSİZ olmalı (Excel tablosu kuralı).
 export const SUTUNLAR: Sutun[] = [
-  { ad: '1. Process Item', gen: 20, liste: true, tekrar: true, ipucu: 'Süreç kalemi (ürün / sistem). Listeden seçin ya da yazın.' },
+  { ad: '1. Process Item', gen: 20, liste: true, tekrar: true, ipucu: 'Süreç kalemi. Satır ekle: sağ tık → Ekle → Tablo Satırları Üste (üstteki değerlerle gelir). Sil: sağ tık → Sil → Tablo Satırları.' },
   { ad: '2. Process Step', gen: 22, liste: true, tekrar: true, ipucu: '[Op. No] Adım adı. Listeden seçin ya da yeni adım yazın, ör. [30] Kesim.' },
   { ad: '3. Process Work Element (4M)', gen: 14, liste: true, ipucu: 'Nedenin kaynağı: İnsan / Makine / Malzeme / Metot / Ölçüm / Çevre.' },
   { ad: '1. Function of the Process Item', gen: 20, liste: true, tekrar: true, ipucu: 'Süreç kaleminin fonksiyonu.' },
@@ -61,6 +64,15 @@ const GOREV_SUTUN = [1, 8, 9, 14, 17, 18, 19, 20, 21, 22, 23];
 
 export const harf = (c: number): string => { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; };
 const sutunNo = (ad: string) => SUTUNLAR.findIndex(s => s.ad === ad);
+const TEKRAR = SUTUNLAR.map((s, i) => s.tekrar ? i : -1).filter(i => i >= 0);
+const FE = sutunNo('1. Failure Effect (FE)'), S_FE = sutunNo('Severity (S) of FE');
+/** Üstteki satırın aynı sütunundaki değer (satır ekle/sil'de kaymaz; tablonun ilk satırında boş). */
+const MIRAS = `IF(ROW()-1=ROW(${TABLO_ADI}[#Headers]),"",INDIRECT("R[-1]C",FALSE)&"")`;
+/** Failure Effect metnindeki "(n)" puanlarının en yükseği (1–10), yoksa ''. Excel formülüyle aynı kural. */
+export const feMax = (t: unknown): number | '' => {
+  const n = [...String(t ?? '').matchAll(/\((\d{1,2})\)/g)].map(m => +m[1]).filter(x => x >= 1 && x <= 10);
+  return n.length ? Math.max(...n) : '';
+};
 const S_ = (t: Tur) => SUTUNLAR.map((s, i) => s.tur === t ? i : -1).filter(i => i >= 0);
 const LISTE_SUTUN = SUTUNLAR.map((s, i) => s.liste ? i : -1).filter(i => i >= 0);
 const GOREV_NO = SUTUNLAR.length;                                   // AE: görev sırası (gizli)
@@ -76,6 +88,9 @@ export function satirFormulu(c: number, r: number, f: number): string | undefine
   const s = SUTUNLAR[c];
   if (s && s.tur === 'AP') return apFormulu(`H${r}`, `L${r}`, `N${r}`);
   if (s && s.tur === 'APR') return apFormulu(`Y${r}`, `Z${r}`, `AA${r}`, true);
+  if (s && s.tekrar) return MIRAS;
+  // LOOKUP(2,1/koşul,…) koşulun doğru olduğu SON (= en büyük) puanı verir; dizi formülü gerekmez
+  if (c === S_FE) return `IFERROR(LOOKUP(2,1/ISNUMBER(SEARCH("("&{1,2,3,4,5,6,7,8,9,10}&")",${k(FE)}${r})),{1,2,3,4,5,6,7,8,9,10}),"")`;
   const R = k(sutunNo('Prevention Action')), D = k(sutunNo('Detection Action'));
   if (c === GOREV_NO)
     return `IF(AND(${R}${r}="",${D}${r}=""),"",SUMPRODUCT(--(((${R}$${f}:${R}${r}<>"")+(${D}$${f}:${D}${r}<>""))>0)))`;
@@ -114,13 +129,19 @@ export function fmeaGovdeYaz(XLSX: any, ws: any, merges: any[], rowIndex: number
   const veri = satirlar.length ? satirlar : [SUTUNLAR.map(() => '')];   // tablo en az bir satır ister
   veri.forEach((satir, i) => {
     const r0 = baslikR + 1 + i, R = r0 + 1;
+    // üstteki satırla aynı kademe değeri, üst kademeleri de aynıysa üsttekini izler (formül)
+    const miras = new Set<number>(), ust = veri[i - 1];
+    for (const c of TEKRAR) { if (!ust || String(satir[c] ?? '') !== String(ust[c] ?? '')) break; miras.add(c); }
+    const sMax = feMax(satir[FE]);
     for (let c = 0; c <= SON_SUTUN; c++) {
       const tur = SUTUNLAR[c]?.tur;
       let st: any = tur ? orta : govde;
       if (zebra[i]) st = { ...st, fill: { fgColor: { rgb: 'F2F2F2' } } };
-      const f = satirFormulu(c, R, ilk);
-      const v = c < GOREV_NO ? (satir[c] ?? '') : '';
-      ws[enc(r0, c)] = f ? { f, v, t: 's', s: st } : { v, t: typeof v === 'number' ? 'n' : 's', s: st };
+      let f = satirFormulu(c, R, ilk);
+      if (TEKRAR.includes(c) && !miras.has(c)) f = undefined;
+      if (c === S_FE && sMax === '') f = undefined;
+      const v = c === S_FE && f ? sMax : c < GOREV_NO ? (satir[c] ?? '') : '';
+      ws[enc(r0, c)] = f ? { f, v, t: typeof v === 'number' ? 'n' : 's', s: st } : { v, t: typeof v === 'number' ? 'n' : 's', s: st };
     }
   });
   const son = ilk + veri.length - 1;
@@ -212,19 +233,22 @@ export function fmeaSayfaXml(sayfa: string, stil: string, a: FmeaPaketAyar): { s
   SUTUNLAR.forEach((s, c) => {
     if (!s.tekrar) return;
     const X = harf(c);
-    cf += `<conditionalFormatting sqref="${ar(c)}"><cfRule type="expression" dxfId="3" priority="${++p}"><formula>${xe(`AND(${X}${a.ilk}<>"",${X}${a.ilk}=${X}${a.ilk - 1})`)}</formula></cfRule></conditionalFormatting>`;
+    cf += `<conditionalFormatting sqref="${ar(c)}"><cfRule type="expression" dxfId="3" priority="${++p}"><formula>${xe(`_xlfn.ISFORMULA(${X}${a.ilk})`)}</formula></cfRule></conditionalFormatting>`;
   });
 
   const dv: string[] = [];
   const ipucu = (baslik: string, metin: string) => ` showInputMessage="1" promptTitle="${xe(baslik.slice(0, 32))}" prompt="${xe(metin.slice(0, 255))}"`;
   const sod = { S: ['Şiddet (S)', 'A'], O: ['Oluşma (O)', 'B'], D: ['Tespit (D)', 'C'] } as const;
-  (['S', 'O', 'D'] as const).forEach(t => {
+  (['S', 'O', 'D'] as const).forEach(t => S_(t).forEach(c => {
     const [ad, K] = sod[t];
-    dv.push(`<dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Geçersiz değer" error="Listeden 1–10 arası bir değer seçin."${ipucu(ad, `Listeden seçin. Ayrıntılı kriterler: '${SOD_SAYFA}' sayfası.`)} sqref="${S_(t).map(ar).join(' ')}"><formula1>${LISTE_SAYFA}!$${K}$1:$${K}$10</formula1></dataValidation>`);
-  });
+    const metin = c === S_FE ? `Otomatik: Failure Effect'teki (n) puanlarının en yükseği. Listeden seçerseniz o değer kalır. Kriterler: '${SOD_SAYFA}'.`
+      : `Listeden seçin. Ayrıntılı kriterler: '${SOD_SAYFA}' sayfası.`;
+    dv.push(`<dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Geçersiz değer" error="Listeden 1–10 arası bir değer seçin."${ipucu(ad, metin)} sqref="${ar(c)}"><formula1>${LISTE_SAYFA}!$${K}$1:$${K}$10</formula1></dataValidation>`);
+  }));
   dv.push(`<dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="Geçersiz durum" error="Listeden seçin."${ipucu('Status', 'Aksiyonun durumu.')} sqref="${S_('durum').map(ar).join(' ')}"><formula1>${LISTE_SAYFA}!$D$1:$D$${DURUMLAR.length}</formula1></dataValidation>`);
   SUTUNLAR.forEach((s, c) => {
-    if (s.liste) dv.push(`<dataValidation type="list" allowBlank="1" showErrorMessage="0"${ipucu(s.ad, s.ipucu || '')} sqref="${ar(c)}"><formula1>${listeAdi(c)}</formula1></dataValidation>`);
+    const tip = (s.ipucu || '') + (s.tekrar && c > 0 ? ' Gri = üstteki satırı izler; üsttekini değiştirince alttakiler de değişir.' : '');
+    if (s.liste) dv.push(`<dataValidation type="list" allowBlank="1" showErrorMessage="0"${ipucu(s.ad, tip)} sqref="${ar(c)}"><formula1>${listeAdi(c)}</formula1></dataValidation>`);
     else if (!s.tur || s.tur === 'AP' || s.tur === 'APR') { if (s.ipucu) dv.push(`<dataValidation allowBlank="1"${ipucu(s.ad, s.ipucu)} sqref="${ar(c)}"/>`); }
   });
   const ek = cf + `<dataValidations count="${dv.length}">${dv.join('')}</dataValidations>`;
@@ -234,6 +258,9 @@ export function fmeaSayfaXml(sayfa: string, stil: string, a: FmeaPaketAyar): { s
   else if (y.includes('</sheetData>')) y = y.replace('</sheetData>', '</sheetData>' + ek);
   else throw new Error('sheetData bulunamadı');
   if (!y.includes('xmlns:r=')) y = y.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+  const ie = `<ignoredError sqref="A${a.ilk}:${harf(SON_SUTUN)}${a.son + 2000}" calculatedColumn="1"/>`;
+  y = y.includes('</ignoredErrors>') ? y.replace('</ignoredErrors>', ie + '</ignoredErrors>')
+    : y.replace(/(<drawing|<legacyDrawing|<\/worksheet>)/, `<ignoredErrors>${ie}</ignoredErrors>$1`);
   y = y.replace('</worksheet>', '<tableParts count="1"><tablePart r:id="rIdFmeaTablo"/></tableParts></worksheet>');
 
   const dxfs = `<dxfs count="${DXF.length + 1}">` + DXF.map(([bg, yazi]) =>
