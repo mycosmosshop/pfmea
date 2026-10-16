@@ -11,12 +11,17 @@ import { buildSync } from 'esbuild';
 
 const kod = (dosya) => buildSync({ entryPoints: [dosya], bundle: true, write: false, format: 'esm', platform: 'neutral', target: 'es2020' }).outputFiles[0].text;
 const yukle = async (dosya) => import('data:text/javascript;base64,' + Buffer.from(kod(dosya)).toString('base64'));
-const { apFormulu, apMatrisSatirlari, sodApXml, AP_SAYFA } = await yukle('utils/sodAp.ts');
+const { apFormulu, apMatrisSatirlari, sodApXml, sodEtiket, listeSatirlari, AP_SAYFA, LISTE_SAYFA } = await yukle('utils/sodAp.ts');
 const { initialApMatrix } = await yukle('utils/ap-matrix.ts');
 
-// 1) Formül: üç değer yoksa boş, revize parantezli
+// 1) Formül: üç değer yoksa boş, baştaki sayı okunur ("7 – …" ya da 7), revize parantezli
 assert.equal(apFormulu('H18', 'L18', 'N18'),
-  `IF(COUNT(H18,L18,N18)<3,"",IFERROR(INDEX('AP Matrisi'!$C$2:$L$101,(H18-1)*10+L18,N18),""))`);
+  `IF(OR(H18="",L18="",N18=""),"",IFERROR(INDEX('AP Matrisi'!$C$2:$L$101,(VALUE(TRIM(LEFT(H18,2)))-1)*10+VALUE(TRIM(LEFT(L18,2))),VALUE(TRIM(LEFT(N18,2)))),""))`);
+assert.equal(sodEtiket('S', 10), '10 – Çalışan / son kullanıcı güvenliği riski');
+assert.equal(sodEtiket('O', 1), '1 – Önleyici kontrolle hata ortadan kalkmış');
+assert.equal(sodEtiket('D', 0), ''); assert.equal(sodEtiket('S', undefined), '');
+const L = listeSatirlari();
+assert.equal(L.length, 10); L.forEach((r, i) => r.forEach(e => assert(e.startsWith(`${i + 1} – `), e)));
 assert.match(apFormulu('Y5', 'Z5', 'AA5', true), /"\("&INDEX\(.*\)&"\)"/);
 console.log('✓ 1  AP formülü (normal + revize parantezli)');
 
@@ -34,12 +39,13 @@ const stil0 = '<styleSheet><cellXfs/><dxfs count="0"/><tableStyles count="0"/></
 const { sayfa, stil } = sodApXml(sayfa0, stil0, ayar);
 assert(sayfa.indexOf('</mergeCells><conditionalFormatting') > 0, 'CF mergeCells sonrası değil');
 assert(sayfa.indexOf('</dataValidations><ignoredErrors') > 0, 'dataValidations ignoredErrors önünde değil');
-assert(sayfa.includes('sqref="H18:H63 Y18:Y63"') && sayfa.includes('sqref="N18:N63 AA18:AA63"'));
+assert(sayfa.includes('sqref="H18:H63 Y18:Y63"><formula1>Listeler!$A$1:$A$10</formula1>'));
+assert(sayfa.includes('sqref="N18:N63 AA18:AA63"><formula1>Listeler!$C$1:$C$10</formula1>'));
 assert.equal((sayfa.match(/<cfRule /g) || []).length, 6);
 assert(sayfa.includes('<formula>&quot;(H)&quot;</formula>'));
 assert.equal((stil.match(/<dxf>/g) || []).length, 3);
 assert.throws(() => sodApXml(sayfa0, stil.replace('', ''), ayar), /dxf/);   // ikinci kez eklenmez
-console.log('✓ 3  açılır liste (S/O/D) + 6 renk kuralı + 3 dxf doğru yerde');
+console.log('✓ 3  açılır liste (S/O/D, gizli Listeler sayfasından) + 6 renk kuralı + 3 dxf doğru yerde');
 
 // 4) Gerçek paket: xlsx-js-style ile yazılır, XML eklenir → Excel testine dosya
 const lib = process.env.SODAP_LIB;
@@ -56,17 +62,21 @@ if (lib && cikti) {
   const ornek = [[10, 10, 10], [9, 2, 1], [8, 6, 5], [7, 4, 7], [6, 8, 2], [5, 3, 9], [4, 7, 4], [3, 9, 6], [2, 8, 8], [1, 1, 1]];
   ornek.forEach(([s, o, d], i) => {
     const r = 17 + i, R = r + 1;
-    yaz(r, 7, { v: s, t: 'n' }); yaz(r, 11, { v: o, t: 'n' }); yaz(r, 13, { v: d, t: 'n' });
+    // ERP çıktısı gibi "7 – açıklama"; son satır düz sayı (elle yazılan değer de çalışmalı)
+    const h = (t, n) => i === 9 ? { v: n, t: 'n' } : { v: sodEtiket(t, n), t: 's' };
+    yaz(r, 7, h('S', s)); yaz(r, 11, h('O', o)); yaz(r, 13, h('D', d));
     yaz(r, 14, { f: apFormulu(`H${R}`, `L${R}`, `N${R}`), v: initialApMatrix[s - 1][o - 1][d - 1], t: 's' });
   });
-  yaz(27, 7, { v: 7, t: 'n' }); yaz(27, 13, { v: 3, t: 'n' }); yaz(27, 14, { f: apFormulu('H28', 'L28', 'N28'), v: '', t: 's' });
-  yaz(28, 24, { v: 8, t: 'n' }); yaz(28, 25, { v: 2, t: 'n' }); yaz(28, 26, { v: 2, t: 'n' });
+  yaz(27, 7, { v: sodEtiket('S', 7), t: 's' }); yaz(27, 13, { v: sodEtiket('D', 3), t: 's' }); yaz(27, 14, { f: apFormulu('H28', 'L28', 'N28'), v: '', t: 's' });
+  yaz(28, 24, { v: sodEtiket('S', 8), t: 's' }); yaz(28, 25, { v: sodEtiket('O', 2), t: 's' }); yaz(28, 26, { v: sodEtiket('D', 2), t: 's' });
   yaz(28, 28, { f: apFormulu('Y29', 'Z29', 'AA29', true), v: '(' + initialApMatrix[7][1][1] + ')', t: 's' });
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }];
   ws['!ref'] = 'A1:AD29';
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'FMEA');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(m), AP_SAYFA);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(L), LISTE_SAYFA);
+  wb.Workbook = { Sheets: [{}, {}, { Hidden: 1 }] };
   const zip = await JSZip.loadAsync(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
   const x = sodApXml(await zip.file('xl/worksheets/sheet1.xml').async('string'), await zip.file('xl/styles.xml').async('string'),
     { ...ayar, son: 29 });

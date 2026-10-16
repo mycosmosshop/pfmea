@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { writeSanifoamAntet, sodApIleIndir } from '../utils/excelExport';
-import { apFormulu, apMatrisSatirlari, AP_SAYFA, SOD_SAYFA } from '../utils/sodAp';
+import { apFormulu, apMatrisSatirlari, sodEtiket, listeSatirlari, AP_SAYFA, SOD_SAYFA, LISTE_SAYFA } from '../utils/sodAp';
 import { initialApMatrix } from '../utils/ap-matrix';
 import { vdaSeverityData } from './SeverityModal';
 import { aiagVdaOccurrenceData } from './OccurrenceModal';
@@ -366,13 +366,13 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
             { v: func ? `${func.name}\n${func.productCharacteristic || ''}` : '', first: isFirstFuncRow, span: funcRowSpans[func?.id] },
             { v: cause?.workElementFunction },
             { v: effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'), first: isFirstModeRow, span: modeRowSpans[mode?.id] },
-            { v: cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined) },
+            { v: sodEtiket('S', cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)) },
             { v: mode?.description, first: isFirstModeRow, span: modeRowSpans[mode?.id] },
             { v: cause?.description },
             { v: cause?.preventionControl },
-            { v: cause?.occurrence },
+            { v: sodEtiket('O', cause?.occurrence) },
             { v: cause?.detectionControl },
-            { v: cause?.detection },
+            { v: sodEtiket('D', cause?.detection) },
             { v: cause?.actionPriority },
             { v: clsLabel(rowClsSymbol(func, cause)) },
             { v: cause?.filterCode },
@@ -383,9 +383,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
             { v: joinActionDetails(cause?.actions, 'status') },
             { v: joinActionDetails(cause?.actions, 'actionTaken') },
             { v: joinActionDetails(cause?.actions, 'completionDate') },
-            { v: cause?.revisedSeverity },
-            { v: cause?.revisedOccurrence },
-            { v: cause?.revisedDetection },
+            { v: sodEtiket('S', cause?.revisedSeverity) },
+            { v: sodEtiket('O', cause?.revisedOccurrence) },
+            { v: sodEtiket('D', cause?.revisedDetection) },
             { v: clsLabel(rowClsSymbol(func, cause)) },
             { v: cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '' },
             { v: cause?.remarks }
@@ -433,7 +433,8 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
 
     ws['!merges'] = merges;
 
-    const colWidths = [ 20, 20, 15, 20, 25, 20, 25, 5, 25, 25, 20, 5, 20, 5, 5, 10, 10, 20, 20, 15, 15, 10, 25, 15, 5, 5, 5, 10, 5, 20 ];
+    // S/O/D sütunları "7 – açıklama" taşır (açılır liste): dar bırakılırsa anlam okunmaz
+    const colWidths = [ 20, 20, 15, 20, 25, 20, 25, 16, 25, 25, 20, 16, 20, 16, 5, 10, 10, 20, 20, 15, 15, 10, 25, 15, 16, 16, 16, 10, 5, 20 ];
     ws['!cols'] = colWidths.map(wch => ({ wch }));
 
     ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 29, r: _lastRow } });
@@ -461,6 +462,12 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
     const wsAp = XLSX.utils.aoa_to_sheet(apMatrisSatirlari(apMatrix || initialApMatrix));
     wsAp['!cols'] = [{ wch: 4 }, { wch: 4 }, ...Array(10).fill({ wch: 6 })];
     XLSX.utils.book_append_sheet(wb, wsAp, AP_SAYFA);
+
+    // Açılır liste kaynağı ("7 – açıklama"), gizli
+    const wsL = XLSX.utils.aoa_to_sheet(listeSatirlari());
+    wsL['!cols'] = [{ wch: 50 }, { wch: 40 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsL, LISTE_SAYFA);
+    wb.Workbook = { Sheets: [{}, {}, {}, { Hidden: 1 }] };
 
     sodApIleIndir(wb, `${fmea.project || 'fmea'}-export-${new Date().toISOString().slice(0, 10)}.xlsx`, {
         ilk: ilkVeriSatiri, son: Math.max(ilkVeriSatiri, _lastRow + 1),

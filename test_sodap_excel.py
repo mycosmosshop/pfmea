@@ -18,22 +18,27 @@ try:
     wb = xl.Workbooks.Open(kopya)
     ws = wb.Worksheets('FMEA')
 
-    # 1) açılır liste: S/O/D sütunlarında liste (xlValidateList = 3), değerler 1..10
+    # 1) açılır liste: S/O/D sütunlarında liste (xlValidateList = 3), kaynak gizli Listeler sayfası
+    beklenen = {'H': 'A', 'Y': 'A', 'L': 'B', 'Z': 'B', 'N': 'C', 'AA': 'C'}
     for adres in ['H18', 'L22', 'N29', 'Y29', 'Z18', 'AA25']:
         v = ws.Range(adres).Validation
         assert v.Type == 3, (adres, v.Type)
-        assert v.Formula1.replace(';', ',') == '1,2,3,4,5,6,7,8,9,10', (adres, v.Formula1)
+        sut = beklenen[adres.rstrip('0123456789')]
+        assert v.Formula1 == f'=Listeler!${sut}$1:${sut}$10', (adres, v.Formula1)
+    L = wb.Worksheets('Listeler')
+    assert L.Visible == 0, 'Listeler sayfası gizli olmalı'                     # xlSheetHidden
+    assert L.Range('A7').Value.startswith('7 – ') and L.Range('C10').Value.startswith('10 – ')
     try:
         ws.Range('O18').Validation.Type
         assert False, 'AP sütununda liste olmamalı'
     except Exception:
         pass
-    print('✓ 1  S/O/D hücrelerinde 1–10 açılır liste var, AP sütununda yok')
+    print('✓ 1  S/O/D hücrelerinde açıklamalı 1–10 listesi (gizli Listeler sayfası), AP sütununda liste yok')
 
     # 2) açılışta hesap: önbellekteki değerlerle aynı
     xl.CalculateFull()
     for r in range(18, 28):
-        s, o, d = (int(ws.Cells(r, c).Value) for c in (8, 12, 14))
+        s, o, d = (int(str(ws.Cells(r, c).Value).split(' ')[0].split('.')[0]) for c in (8, 12, 14))
         assert ws.Cells(r, 15).Value == m[s - 1][o - 1][d - 1], (r, s, o, d, ws.Cells(r, 15).Value)
     assert ws.Range('O28').Value in (None, ''), 'O boşken AP boş olmalı'
     assert ws.Range('AC29').Value == '(' + m[7][1][1] + ')', ws.Range('AC29').Value
@@ -43,8 +48,10 @@ try:
     random.seed(7)
     deneme = [(s, o, d) for s in (1, 10) for o in (1, 10) for d in (1, 10)] + \
              [(random.randint(1, 10), random.randint(1, 10), random.randint(1, 10)) for _ in range(300)]
-    for s, o, d in deneme:
-        ws.Range('H18').Value = s; ws.Range('L18').Value = o; ws.Range('N18').Value = d
+    for i, (s, o, d) in enumerate(deneme):
+        # listeden seçilen gibi "7 – …" metni ve elle yazılan düz sayı dönüşümlü
+        val = (lambda sut, n: L.Range(f'{sut}{n}').Value) if i % 2 else (lambda sut, n: n)
+        ws.Range('H18').Value = val('A', s); ws.Range('L18').Value = val('B', o); ws.Range('N18').Value = val('C', d)
         assert ws.Range('O18').Value == m[s - 1][o - 1][d - 1], (s, o, d, ws.Range('O18').Value)
     print(f'✓ 3  {len(deneme)} S/O/D kombinasyonunda AP formülü matrisle aynı')
 

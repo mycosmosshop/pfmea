@@ -6,13 +6,69 @@
 
 export const AP_SAYFA = 'AP Matrisi';
 export const SOD_SAYFA = 'S-O-D Tabloları';
+export const LISTE_SAYFA = 'Listeler';     // açılır liste kaynağı (gizli sayfa)
+
+// Açılır listedeki kısa Türkçe anlamlar (AIAG-VDA PFMEA; ERP'deki S/O/D pencereleriyle aynı tablolar).
+// Dizi sırası 1 → 10.
+export const SOD_ETIKET: Record<'S' | 'O' | 'D', string[]> = {
+  S: [
+    'Fark edilebilir etki yok',
+    'Hafif rahatsızlık; süreçte küçük aksama',
+    'Orta rahatsızlık; kısmi istasyon içi tamir',
+    'Belirgin görünüm/ses kusuru; %100 istasyonda tamir',
+    'İkincil fonksiyonda bozulma; kısmi hat dışı tamir',
+    'İkincil fonksiyon kaybı; %100 hat dışı tamir',
+    'Ana fonksiyonda bozulma; kısmi hurda, ayıklama',
+    'Ana fonksiyon kaybı; %100 hurda, sevkiyat durur',
+    'Yasal mevzuata aykırılık',
+    'Çalışan / son kullanıcı güvenliği riski',
+  ],
+  O: [
+    'Önleyici kontrolle hata ortadan kalkmış',
+    'Çok düşük: binde <0,001 (1/1.000.000)',
+    'Düşük: binde 0,01 (1/100.000)',
+    'Orta: binde 0,1 (1/10.000)',
+    'Orta: binde 0,5 (1/2.000)',
+    'Orta: binde 2 (1/500)',
+    'Yüksek: binde 10 (1/100)',
+    'Yüksek: binde 20 (1/50)',
+    'Yüksek: binde 50 (1/20)',
+    'Çok yüksek: binde ≥100 (≥1/10)',
+  ],
+  D: [
+    'Hata oluşamaz ya da her zaman tespit edilir',
+    'Kanıtlı yöntem; nedeni makine yakalar, hata oluşmaz',
+    'Kanıtlı sistem; istasyonda otomatik tespit',
+    'Kanıtlı sistem; sonraki istasyonda otomatik tespit',
+    'Kanıtlı yöntem; yarı otomatik / makine tespiti',
+    'Kanıtlı yöntem; insan kontrolü / manuel ölçüm',
+    'Kanıtlanmamış yöntem; makine tespiti',
+    'Kanıtlanmamış yöntem; insan kontrolü / manuel ölçüm',
+    'Rastgele denetim; tespit olası değil',
+    'Kontrol yöntemi yok; tespit edilemez',
+  ],
+};
+
+/** "7 – Ana fonksiyonda bozulma; …" (1–10 dışı ya da boş → ''). Formül baştaki sayıyı okur. */
+export function sodEtiket(tur: 'S' | 'O' | 'D', n: unknown): string {
+  const v = Number(n);
+  return Number.isInteger(v) && v >= 1 && v <= 10 ? `${v} – ${SOD_ETIKET[tur][v - 1]}` : '';
+}
+
+/** Gizli "Listeler" sayfası: A = S, B = O, C = D (1. satır = 1 … 10. satır = 10). */
+export const listeSatirlari = (): string[][] =>
+  Array.from({ length: 10 }, (_, i) => (['S', 'O', 'D'] as const).map(t => sodEtiket(t, i + 1)));
 
 type Ap = 'H' | 'M' | 'L';
 
-/** AP formülü (başında "=" yok). s/o/d: hücre adresi (H18). revize=true → "(M)" biçimi. */
+/**
+ * AP formülü (başında "=" yok). s/o/d: hücre adresi (H18). revize=true → "(M)" biçimi.
+ * Hücrede "7 – açıklama" de olabilir düz 7 de: baştaki sayı okunur (VALUE(TRIM(LEFT(…;2)))).
+ */
 export function apFormulu(s: string, o: string, d: string, revize = false): string {
-  const ic = `INDEX('${AP_SAYFA}'!$C$2:$L$101,(${s}-1)*10+${o},${d})`;
-  return `IF(COUNT(${s},${o},${d})<3,"",IFERROR(${revize ? `"("&${ic}&")"` : ic},""))`;
+  const n = (h: string) => `VALUE(TRIM(LEFT(${h},2)))`;
+  const ic = `INDEX('${AP_SAYFA}'!$C$2:$L$101,(${n(s)}-1)*10+${n(o)},${n(d)})`;
+  return `IF(OR(${s}="",${o}="",${d}=""),"",IFERROR(${revize ? `"("&${ic}&")"` : ic},""))`;
 }
 
 /** AP matrisi sayfasının satırları: başlık + 100 satır (S, O, D1…D10). */
@@ -41,12 +97,14 @@ const DXF = [['FFFFC7CE', 'FF9C0006'], ['FFFFEB9C', 'FF9C5700'], ['FFC6EFCE', 'F
  */
 export function sodApXml(sayfa: string, stil: string, a: SodApAyar): { sayfa: string; stil: string } {
   const aralik = (k: string[]) => k.map(c => `${c}${a.ilk}:${c}${a.son}`).join(' ');
-  const liste = (ad: string, k: string[]) =>
+  // Liste kaynağı gizli "Listeler" sayfası (A=S, B=O, C=D): "7 – açıklama" satırları.
+  // Satır içi liste ("1,2,…") 255 karakterle sınırlı; açıklamalı liste sığmaz.
+  const liste = (ad: string, k: string[], sutun: string) =>
     `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1"`
-    + ` errorTitle="Geçersiz değer" error="1 ile 10 arasında bir değer seçin."`
-    + ` promptTitle="${xe(ad)}" prompt="${xe(`1–10 arası seçin. Puan kriterleri: '${SOD_SAYFA}' sayfası.`)}"`
-    + ` sqref="${aralik(k)}"><formula1>"1,2,3,4,5,6,7,8,9,10"</formula1></dataValidation>`;
-  const dv = `<dataValidations count="3">${liste('Şiddet (S)', a.s)}${liste('Oluşma (O)', a.o)}${liste('Tespit (D)', a.d)}</dataValidations>`;
+    + ` errorTitle="Geçersiz değer" error="Listeden 1–10 arası bir değer seçin."`
+    + ` promptTitle="${xe(ad)}" prompt="${xe(`Listeden seçin. Ayrıntılı kriterler: '${SOD_SAYFA}' sayfası.`)}"`
+    + ` sqref="${aralik(k)}"><formula1>${LISTE_SAYFA}!$${sutun}$1:$${sutun}$10</formula1></dataValidation>`;
+  const dv = `<dataValidations count="3">${liste('Şiddet (S)', a.s, 'A')}${liste('Oluşma (O)', a.o, 'B')}${liste('Tespit (D)', a.d, 'C')}</dataValidations>`;
 
   let p = 0;
   const kural = (k: string[], deger: (ap: string) => string) => k.length ? `<conditionalFormatting sqref="${aralik(k)}">`
