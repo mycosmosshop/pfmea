@@ -31,7 +31,9 @@ try:
     t = ws.ListObjects(1)
     assert t.ListRows.Count == 5, t.ListRows.Count
     assert L.Visible == 0
-    print('✓ 1  FMEA_Tablo açılıyor (5 satır), Listeler gizli')
+    assert L.Range('B4').Value == 4 and L.Range('B4').Text.startswith('4 – Orta'), (L.Range('B4').Value, L.Range('B4').Text)
+    assert ws.Range('H17').Value == 7 and ws.Range('H17').Text == '7', 'S hücresi yalnız sayı göstermeli'
+    print('✓ 1  FMEA_Tablo açılıyor (5 satır), Listeler gizli; liste kaynağı 4 = "4 – Orta…" görünüyor, hücrede yalnız 7')
 
     # 2) kademe listesi: üstte kullanılan değerler, tekrarsız
     assert liste('Liste_B') == ['[10] Giriş kontrol', '[20] Kesim', '[30] Paketleme'], liste('Liste_B')

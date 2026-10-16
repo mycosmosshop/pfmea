@@ -7,7 +7,7 @@ import { buildSync } from 'esbuild';
 
 const kod = (dosya) => buildSync({ entryPoints: [dosya], bundle: true, write: false, format: 'esm', platform: 'neutral', target: 'es2020' }).outputFiles[0].text;
 const yukle = async (dosya) => import('data:text/javascript;base64,' + Buffer.from(kod(dosya)).toString('base64'));
-const { apFormulu, apMatrisSatirlari, sodEtiket, listeSatirlari } = await yukle('utils/sodAp.ts');
+const { apFormulu, apMatrisSatirlari, sodEtiket, sodPuan, sodBicim } = await yukle('utils/sodAp.ts');
 const { initialApMatrix } = await yukle('utils/ap-matrix.ts');
 
 // 1) Formül: üç değer yoksa boş, baştaki sayı okunur ("7 – …" ya da 7), revize parantezli
@@ -16,8 +16,8 @@ assert.equal(apFormulu('H18', 'L18', 'N18'),
 assert.equal(sodEtiket('S', 10), '10 – Çalışan / son kullanıcı güvenliği riski');
 assert.equal(sodEtiket('O', 1), '1 – Önleyici kontrolle hata ortadan kalkmış');
 assert.equal(sodEtiket('D', 0), ''); assert.equal(sodEtiket('S', undefined), '');
-const L = listeSatirlari();
-assert.equal(L.length, 10); L.forEach((r, i) => r.forEach(e => assert(e.startsWith(`${i + 1} – `), e)));
+assert.equal(sodPuan(7), 7); assert.equal(sodPuan('7'), 7); assert.equal(sodPuan(0), ''); assert.equal(sodPuan(''), ''); assert.equal(sodPuan(null), '');
+assert.equal(sodBicim('O', 4), '0" – Orta: binde 0,1 (1/10.000)"');
 assert.match(apFormulu('Y5', 'Z5', 'AA5', true), /"\("&INDEX\(.*\)&"\)"/);
 console.log('✓ 1  AP formülü (normal + revize parantezli)');
 

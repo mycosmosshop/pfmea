@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import type { FmeaData, ModalType, ProcessItem, ProcessStep, ProcessStepFunction, FailureMode, FailureEffect, FailureCause, RegistryData, ProjectData, FmeaAction } from '../types';
 import { ClassificationSymbol } from './ClassificationSymbol';
 import { writeSanifoamAntet, fmeaIndir } from '../utils/excelExport';
-import { sodEtiket } from '../utils/sodAp';
+import { sodPuan } from '../utils/sodAp';
 import { fmeaGovdeYaz, ekSayfalar, FMEA_SAYFA, FMEA_SON_SUTUN } from '../utils/fmeaExcel';
 import { initialApMatrix } from '../utils/ap-matrix';
 import { vdaSeverityData } from './SeverityModal';
@@ -330,13 +330,13 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
             func ? `${func.name}\n${func.productCharacteristic || ''}`.trim() : '',
             cause?.workElementFunction,
             effects.map(e => `[${e.clientType}] ${e.effectText}`).join('\n'),
-            sodEtiket('S', cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)),
+            sodPuan(cause?.severity ?? (effects.length > 0 ? Math.max(...effects.map(e => e.severity || 0)) : undefined)),
             mode?.description,
             cause?.description,
             cause?.preventionControl,
-            sodEtiket('O', cause?.occurrence),
+            sodPuan(cause?.occurrence),
             cause?.detectionControl,
-            sodEtiket('D', cause?.detection),
+            sodPuan(cause?.detection),
             cause?.actionPriority,
             clsLabel(rowClsSymbol(func, cause)),
             cause?.filterCode,
@@ -347,9 +347,9 @@ const FmeaTable: React.FC<FmeaTableProps> = ({ data, apMatrix, registryData, pro
             joinActionDetails(cause?.actions, 'status'),
             joinActionDetails(cause?.actions, 'actionTaken'),
             joinActionDetails(cause?.actions, 'completionDate'),
-            sodEtiket('S', cause?.revisedSeverity),
-            sodEtiket('O', cause?.revisedOccurrence),
-            sodEtiket('D', cause?.revisedDetection),
+            sodPuan(cause?.revisedSeverity),
+            sodPuan(cause?.revisedOccurrence),
+            sodPuan(cause?.revisedDetection),
             clsLabel(rowClsSymbol(func, cause)),
             cause?.revisedActionPriority ? `(${cause.revisedActionPriority})` : '',
             cause?.remarks,

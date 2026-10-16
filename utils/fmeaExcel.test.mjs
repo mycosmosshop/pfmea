@@ -11,7 +11,7 @@ import { buildSync } from 'esbuild';
 const kod = (d) => buildSync({ entryPoints: [d], bundle: true, write: false, format: 'esm', platform: 'neutral', target: 'es2020' }).outputFiles[0].text;
 const yukle = async (d) => import('data:text/javascript;base64,' + Buffer.from(kod(d)).toString('base64'));
 const E = await yukle('utils/fmeaExcel.ts');
-const { sodEtiket } = await yukle('utils/sodAp.ts');
+
 const { initialApMatrix } = await yukle('utils/ap-matrix.ts');
 
 // 1) sütun adları benzersiz (Excel tablosu şartı), harf dönüşümü
@@ -52,8 +52,8 @@ if (lib && cikti) {
   const { XLSX, JSZip } = ctx;
   const s = (item, step, m4, fstep, eff, sev, mode, cause, pc, o, dc, d, prev = '', det = '', sor = '', durum = '') => {
     const r = Array(30).fill('');
-    Object.assign(r, { 0: item, 1: step, 2: m4, 3: item + ' fonksiyonu', 4: fstep, 5: 'Proses karakteristiği', 6: eff, 7: sodEtiket('S', sev), 8: mode, 9: cause, 10: pc,
-      11: sodEtiket('O', o), 12: dc, 13: sodEtiket('D', d), 14: initialApMatrix[sev - 1][o - 1][d - 1], 17: prev, 18: det, 19: sor, 21: durum });
+    Object.assign(r, { 0: item, 1: step, 2: m4, 3: item + ' fonksiyonu', 4: fstep, 5: 'Proses karakteristiği', 6: eff, 7: sev, 8: mode, 9: cause, 10: pc,
+      11: o, 12: dc, 13: d, 14: initialApMatrix[sev - 1][o - 1][d - 1], 17: prev, 18: det, 19: sor, 21: durum });
     return r;
   };
   const satirlar = [

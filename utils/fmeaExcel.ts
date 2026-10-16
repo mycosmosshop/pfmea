@@ -11,7 +11,7 @@
 //   silinince listeden çıkar.
 // xlsx-js-style tablo / liste / koşullu biçim yazamaz: bunlar paket XML'ine sonradan eklenir.
 
-import { apFormulu, apMatrisSatirlari, listeSatirlari, AP_SAYFA, SOD_SAYFA, LISTE_SAYFA } from './sodAp';
+import { apFormulu, apMatrisSatirlari, sodBicim, AP_SAYFA, SOD_SAYFA, LISTE_SAYFA } from './sodAp';
 
 export const FMEA_SAYFA = 'FMEA';
 export const GOREV_SAYFA = 'Görevler';
@@ -31,13 +31,13 @@ export const SUTUNLAR: Sutun[] = [
   { ad: '2. Function of the Process Step and Product Characteristic', gen: 25, liste: true, tekrar: true, ipucu: 'Adımın fonksiyonu ve ürün karakteristiği, ör. En 1270 ± 5 mm.' },
   { ad: '3. Function of the Work Element and Process Characteristic', gen: 20, ipucu: '4M öğesinin fonksiyonu ve proses karakteristiği (sıcaklık, hız, basınç…).' },
   { ad: '1. Failure Effect (FE)', gen: 25, liste: true, tekrar: true, ipucu: 'Hatanın etkisi: [P] tesis içi / [C] müşteri / [E] son kullanıcı. Listeden seçin ya da yazın.' },
-  { ad: 'Severity (S) of FE', gen: 16, tur: 'S' },
+  { ad: 'Severity (S) of FE', gen: 24, tur: 'S' },
   { ad: '2. Failure Mode (FM)', gen: 25, liste: true, tekrar: true, ipucu: 'Ürün karakteristiğinin bozulma şekli, ör. En ölçüsü tolerans dışı.' },
   { ad: '3. Failure Cause (FC)', gen: 25, ipucu: '4M öğesinde hatayı doğuran neden, ör. Kesim bıçağı aşınması.' },
   { ad: 'Current Prevention Control (PC)', gen: 20, liste: true, ipucu: 'Nedeni önleyen mevcut kontrol: talimat, bakım, eğitim, poka-yoke… Listeden seçin ya da yazın.' },
-  { ad: 'Occurrence (O) of FC', gen: 16, tur: 'O' },
+  { ad: 'Occurrence (O) of FC', gen: 24, tur: 'O' },
   { ad: 'Current Detection Control (DC)', gen: 20, liste: true, ipucu: 'Hatayı ya da nedeni yakalayan mevcut kontrol: giriş, proses içi, final kontrol… Listeden seçin ya da yazın.' },
-  { ad: 'Detection (D) of FC/FM', gen: 16, tur: 'D' },
+  { ad: 'Detection (D) of FC/FM', gen: 24, tur: 'D' },
   { ad: 'PFMEA AP', gen: 6, tur: 'AP', ipucu: 'Otomatik: S, O ve D seçilince hesaplanır. Elle yazmayın.' },
   { ad: 'Spec. Characteristic', gen: 10, liste: true, ipucu: 'Özel karakteristik (CC / SC…). Listeden seçin ya da yazın.' },
   { ad: 'Filter Code (Optional)', gen: 10 },
@@ -48,9 +48,9 @@ export const SUTUNLAR: Sutun[] = [
   { ad: 'Status', gen: 12, tur: 'durum' },
   { ad: 'Action Taken with Pointer to Evidence', gen: 25, ipucu: 'Yapılan iş ve kanıtı (doküman / kayıt no).' },
   { ad: 'Completion Date', gen: 13, ipucu: 'Tamamlanma tarihi.' },
-  { ad: 'Severity (S)', gen: 16, tur: 'S' },
-  { ad: 'Occurrence (O)', gen: 16, tur: 'O' },
-  { ad: 'Detection (D)', gen: 16, tur: 'D' },
+  { ad: 'Severity (S)', gen: 24, tur: 'S' },
+  { ad: 'Occurrence (O)', gen: 24, tur: 'O' },
+  { ad: 'Detection (D)', gen: 24, tur: 'D' },
   { ad: 'Spec. Characteristic (Revize)', gen: 10 },
   { ad: 'PFMEA AP (Revize)', gen: 7, tur: 'APR', ipucu: 'Otomatik: revize S, O ve D seçilince hesaplanır.' },
   { ad: 'Remarks', gen: 20 },
@@ -170,8 +170,12 @@ export function ekSayfalar(XLSX: any, wb: any, satirlar: any[][], apMatrix: any,
   wsAp['!cols'] = [{ wch: 4 }, { wch: 4 }, ...Array(10).fill({ wch: 6 })];
   XLSX.utils.book_append_sheet(wb, wsAp, AP_SAYFA);
 
-  // Listeler (gizli): A–C S/O/D, D durum, F… kademe listeleri (FMEA'daki ilk-görülme sırasından)
-  const L: any = XLSX.utils.aoa_to_sheet(listeSatirlari());
+  // Listeler (gizli): A–C S/O/D, D durum, F… kademe listeleri (FMEA'daki ilk-görülme sırasından).
+  // S/O/D hücresi SAYI, açıklama sayı biçiminde: listede "4 – …" görünür, seçilince hücreye 4 yazılır.
+  const L: any = {};
+  (['S', 'O', 'D'] as const).forEach((t, c) => {
+    for (let n = 1; n <= 10; n++) { const z = sodBicim(t, n); L[enc(n - 1, c)] = { v: n, t: 'n', z, s: { numFmt: z } }; }
+  });
   DURUMLAR.forEach((d, i) => { L[enc(i, 3)] = { v: d, t: 's' }; });
   LISTE_SUTUN.forEach(i => {
     const c = 5 + LISTE_SUTUN.indexOf(i), X = harf(i), H = harf(YARDIMCI(i));
@@ -181,6 +185,7 @@ export function ekSayfalar(XLSX: any, wb: any, satirlar: any[][], apMatrix: any,
       L[enc(k - 1, c)] = { f: `IFERROR(INDEX(${FMEA_SAYFA}!$${X}:$${X},MATCH(${k},${FMEA_SAYFA}!$${H}:$${H},0)),"")`, v: tekil[k - 1] ?? '', t: 's' };
   });
   L['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: LISTE_SATIR - 1, c: 5 + LISTE_SUTUN.length - 1 } });
+  L['!cols'] = [{ wch: 70 }, { wch: 70 }, { wch: 70 }];   // dar sütunda biçimli sayı "####" olur
   XLSX.utils.book_append_sheet(wb, L, LISTE_SAYFA);
 
   // Listeler sayfası gizli; açılır listeler boşluksuz uzunlukta (OFFSET + COUNTIF "?*")

@@ -49,15 +49,24 @@ export const SOD_ETIKET: Record<'S' | 'O' | 'D', string[]> = {
   ],
 };
 
-/** "7 – Ana fonksiyonda bozulma; …" (1–10 dışı ya da boş → ''). Formül baştaki sayıyı okur. */
+/** "7 – Ana fonksiyonda bozulma; …" (1–10 dışı ya da boş → ''). */
 export function sodEtiket(tur: 'S' | 'O' | 'D', n: unknown): string {
   const v = Number(n);
   return Number.isInteger(v) && v >= 1 && v <= 10 ? `${v} – ${SOD_ETIKET[tur][v - 1]}` : '';
 }
 
-/** Gizli "Listeler" sayfası: A = S, B = O, C = D (1. satır = 1 … 10. satır = 10). */
-export const listeSatirlari = (): string[][] =>
-  Array.from({ length: 10 }, (_, i) => (['S', 'O', 'D'] as const).map(t => sodEtiket(t, i + 1)));
+/** Hücreye yazılan puan: 1–10 tam sayı, değilse ''. */
+export function sodPuan(n: unknown): number | '' {
+  const v = Number(n);
+  return n !== '' && n != null && Number.isInteger(v) && v >= 1 && v <= 10 ? v : '';
+}
+
+/**
+ * Liste kaynağındaki hücrenin sayı biçimi: değer 4, görünen "4 – Orta: binde 0,1 …".
+ * Açılır liste görüneni gösterir ama seçilince hücreye yalnız SAYI yazılır (Excel 2019'da denendi).
+ */
+export const sodBicim = (tur: 'S' | 'O' | 'D', n: number): string =>
+  '0"' + sodEtiket(tur, n).slice(String(n).length).replace(/"/g, "'") + '"';
 
 type Ap = 'H' | 'M' | 'L';
 
